@@ -8,8 +8,8 @@ ExperimentManager = function() {
 	// Check for browser support:
 	if(typeof(WebSocket)!=="undefined") {
 
-	    //wsExp = new WebSocket("ws://mono.stanford.edu:5004/echo_tree_experiment");
-	    wsExp = new WebSocket("ws://localhost:5004/echo_tree_experiment");
+	    wsExp = new WebSocket("ws://mono.stanford.edu:5004/echo_tree_experiment");
+	    //wsExp = new WebSocket("ws://localhost:5004/echo_tree_experiment");
 
 	    wsExp.onopen = function () {
 	    };

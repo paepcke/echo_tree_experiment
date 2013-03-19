@@ -27,6 +27,11 @@ from echo_tree import WordExplorer;
 
 HOST = socket.getfqdn();
 ECHO_TREE_EXPERIMENT_SERVICE_PORT = 5004;
+ECHO_TREE_EXPERIMENT_DISABLED_PORT = 5005;
+ECHO_TREE_EXPERIMENT_PARTNER_PORT = 5006;
+
+DISABLED_PAGE_NAME = "disabled.html";
+PARTNER_PAGE_NAME = "partner.html";
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
@@ -80,11 +85,6 @@ class EchoTreeLogService(WebSocketHandler):
         # experiment logger:
         with EchoTreeLogService.activeHandlersChangeLock:
             EchoTreeLogService.activeHandlers.append(self);
-            
-        # Event that will be set when subject performs an
-        # action that requires response action on the partner's browser.
-#        # Thread SubjectActionThread will wait for this event:
-#        self.newEchoTreeEvent = Event();
     
     def allow_draft76(self):
         '''
@@ -170,34 +170,77 @@ class EchoTreeLogService(WebSocketHandler):
                     handler.write_message(msg);
                     EchoTreeLogService.log("Message to participant: " + msg);
     
-    class SubjectActionThread(Thread):
+# --------------------  Request Handler Class for browsers: serves HTML pages and javascript -------------------
+
+class EchoTreeExperimentDisabledRequestHandler(HTTPServer):
+    '''
+    Web service serving an HTML page for the experiment 
+    participant who plays the disabled person.
+    '''
+
+#    def _execute(self, transforms):
+#        pass;
+
+    @staticmethod
+    def handle_request(request):
         '''
-        Thread that waits for a new EchoTree to be submitted.
+        Hangles the HTTP GET request.
+        @param request: instance holding information about the request
+        @type request: ???
         '''
+        # Path to the HTML page we serve. Should probably just load that once, but
+        # this request is not frequent. 
+        scriptPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+                                  "../browser_scripts/" + DISABLED_PAGE_NAME);
+        # Create the response and the HTML page string:
+        reply =  "HTTP/1.1 200 OK\r\n" +\
+                 "Content-type, text/html\r\n" +\
+                 "Content-Length:%s\r\n" % os.path.getsize(scriptPath) +\
+                 "Last-Modified:%s\r\n" % time.ctime(os.path.getmtime(scriptPath)) +\
+                 "\r\n";
+        # Add the HTML page to the header:
+        with open(scriptPath) as fileFD:
+            for line in fileFD:
+                reply += line;
+        request.write(reply);
+        request.finish();
         
-        def __init__(self, handlerObj):
-            '''
-            Init thread
-            @param handlerObj: instance of EchoTreeLogService.
-            @type handlerObj: EchoTreeLogService.
-            '''
-            super(EchoTreeLogService.NewEchoTreeWaitThread, self).__init__();
-            self.handlerObj = handlerObj
         
-        def run(self):
-            while 1:
-                # Hang on new-EchoServer event:
-                self.handlerObj.newEchoTreeEvent.wait();
-                with EchoTreeLogService.currentEchoTreeLock:
-                    # Deliver the new tree to the browser:
-                    try:
-                        self.handlerObj.write_message(EchoTreeLogService.currentEchoTree);
-                    except Exception:
-                        EchoTreeLogService.log("Error during send of new EchoTree to %s (%s)" % (self.handlerObj.request.host, self.handlerObj.request.remote_ip));
-                self.handlerObj.newEchoTreeEvent.clear();
-                with EchoTreeLogService.currentEchoTreeLock:
-                    EchoTreeLogService.log(EchoTreeLogService.currentEchoTree);
-    
+# --------------------  Request Handler Class for browsers requesting the JavaScript that knows to open a disabled or partner connection ---------------
+
+class EchoTreeExperimentPartnerRequestHandler(HTTPServer):
+    '''
+    Web service serving an HTML page for the experiment 
+    participant who plays the partner person.
+    '''
+
+#    def _execute(self, transforms):
+#        pass;
+
+    @staticmethod
+    def handle_request(request):
+        '''
+        Hangles the HTTP GET request.
+        @param request: instance holding information about the request
+        @type request: ???
+        '''
+        # Path to the HTML page we serve. Should probably just load that once, but
+        # this request is not frequent. 
+        scriptPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+                                  "../browser_scripts/" + PARTNER_PAGE_NAME);
+        # Create the response and the HTML page string:
+        reply =  "HTTP/1.1 200 OK\r\n" +\
+                 "Content-type, text/html\r\n" +\
+                 "Content-Length:%s\r\n" % os.path.getsize(scriptPath) +\
+                 "Last-Modified:%s\r\n" % time.ctime(os.path.getmtime(scriptPath)) +\
+                 "\r\n";
+        # Add the HTML page to the header:
+        with open(scriptPath) as fileFD:
+            for line in fileFD:
+                reply += line;
+        request.write(reply);
+        request.finish();
+        
         
 # --------------------  Helper class for spawning the services in their own threads ---------------
                 
@@ -229,17 +272,17 @@ class SocketServerThreadStarter(Thread):
         '''
         super(SocketServerThreadStarter, self).run();
         try:
-            if  self.socketServerClassName == 'RootWordSubmissionService':
-                EchoTreeLogService.log("Starting EchoTree new tree submissions server %d: accepts word trees submitted from connecting clients." % self.port);
-                http_server = RootWordSubmissionService(RootWordSubmissionService.handle_request);
+            if  self.socketServerClassName == 'EchoTreeExperimentPartnerRequestHandler':
+                EchoTreeLogService.log("Starting EchoTree page server %d: Returns page for the 'partner' participant." % self.port);
+                http_server = EchoTreeExperimentPartnerRequestHandler(EchoTreeExperimentPartnerRequestHandler.handle_request);
                 http_server.listen(self.port);
                 self.ioLoop = IOLoop();
                 self.ioLoop.start();
                 self.ioLoop.close(all_fds=True);
                 return;
-            elif self.socketServerClassName == 'EchoTreeScriptRequestHandler':
-                EchoTreeLogService.log("Starting EchoTree script server %d: Returns one script that listens to the new-tree events in the browser." % self.port);
-                http_server = EchoTreeScriptRequestHandler(EchoTreeScriptRequestHandler.handle_request);
+            elif self.socketServerClassName == 'EchoTreeExperimentDisabledRequestHandler':
+                EchoTreeLogService.log("Starting EchoTree page server %d: Returns page for the 'disabled' participant." % self.port);
+                http_server = EchoTreeExperimentDisabledRequestHandler(EchoTreeExperimentDisabledRequestHandler.handle_request);
                 http_server.listen(self.port);
                 self.ioLoop = IOLoop();
                 self.ioLoop.start();
@@ -282,10 +325,20 @@ if __name__ == '__main__':
     if args.verbose:
         EchoTreeLogService.logToConsole = True;
 
-                                           
-    EchoTreeLogService.log("Starting EchoTree server at port %s: . Interacts with participants." % "/echo_tree_experiment");
+    # Service that coordinates traffice among all active participants:                                   
+    EchoTreeLogService.log("Starting EchoTree experiment server at port %s: . Interacts with participants." % "/echo_tree_experiment");
     application = tornado.web.Application([(r"/echo_tree_experiment", EchoTreeLogService),                                           
                                            ]);
+    # Create the service that serves out the 'disabled' participant's Web page:
+    #EchoTreeLogService.log('Starting EchoTree experiment for disabled participant page at port %d' % ECHO_TREE_EXPERIMENT_DISABLED_PORT);
+    disabledServer = SocketServerThreadStarter('EchoTreeExperimentDisabledRequestHandler', ECHO_TREE_EXPERIMENT_DISABLED_PORT); 
+    disabledServer.start();
+                                           
+    # Create the service that serves out the 'partner' participant's Web page:
+    #EchoTreeLogService.log('Starting EchoTree experiment for partner participant page at port %d' % ECHO_TREE_EXPERIMENT_PARTNER_PORT);
+    partnerServer = SocketServerThreadStarter('EchoTreeExperimentPartnerRequestHandler', ECHO_TREE_EXPERIMENT_PARTNER_PORT); 
+    partnerServer.start();
+                                           
     application.listen(ECHO_TREE_EXPERIMENT_SERVICE_PORT);
     
     try:
@@ -301,9 +354,8 @@ if __name__ == '__main__':
         EchoTreeLogService.log("Stopping EchoTree experiment server...");
         if ioLoop.running():
             ioLoop.stop();
-        rootWordAcceptor.stop();
-        scriptServer.stop();
-        treeComputerThread.stop();
+        disabledServer.stop();
+        partnerServer.stop();
         EchoTreeLogService.log("EchoTree experiment server stopped.");
         if EchoTreeLogService.logFD is not None:
             EchoTreeLogService.logFD.close();

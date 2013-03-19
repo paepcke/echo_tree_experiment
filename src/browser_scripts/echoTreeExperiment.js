@@ -28,14 +28,13 @@ if(typeof(WebSocket)!=="undefined") {
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
     //var ws = new WebSocket("ws://duo:5001/subscribe_to_echo_trees");
-    //var ws = new WebSocket("ws://mono.stanford.edu:5001/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://localhost:5001/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://mono.stanford.edu:5001/subscribe_to_echo_trees");
+    //var ws = new WebSocket("ws://localhost:5001/subscribe_to_echo_trees");
 
     ws.onopen = function () {
     };
 
     ws.onerror = function () {
-	//writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
 	alert('ERROR: ' + evt.data);
     };
 
