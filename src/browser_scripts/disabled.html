@@ -1,0 +1,34 @@
+<html>
+  <head>
+
+    <link rel="stylesheet" href="disabled.css" type="text/css" />
+
+  </head>
+  <body>
+
+    <div class=application align="center">
+
+      <textarea name="allText" rows="10" cols="50" readonly>
+	Text to communicate will appear here.
+      </textarea><br>
+    </div>
+
+    <div id=echotree>
+    </div>
+
+    <div class=application align="center">
+      <input class="twoLines" type="text" name="ticker" id="ticker">
+      <button class="normal" name="wordSendButton">Send</button>
+
+      <br>
+      <button class=bigButton name="partialDone">That's Right</button>
+      <button class=scary name="allDone">Paragraph Done</button>
+
+    </div>
+
+    <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
+    <script type="text/javascript" src="echoTree.js"></script>
+    <script type="text/javascript" src="manageExperiment.js"></script>
+
+  </body>
+</html>

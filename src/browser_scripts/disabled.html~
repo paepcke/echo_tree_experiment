@@ -1,0 +1,14 @@
+<html>
+<head>
+</head>
+<body>
+<div>
+<textarea name="allText" rows="10" cols="50" readonly>
+Text to communicate will appear here.
+</textarea><br>
+
+<input type="text" name="wordsTyped">
+<button name="wordSendButton">Send</button>
+
+</body>
+</html>

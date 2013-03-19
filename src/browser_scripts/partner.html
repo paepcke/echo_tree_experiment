@@ -1,0 +1,53 @@
+
+<!DOCTYPE HTML>
+<html>
+  <head>
+
+    <link rel="stylesheet" href="partner.css" type="text/css" />
+    <meta charset="UTF-8">
+
+  </head>
+  <body>
+    <div class=application id=userMsg>
+      New word: <input class="twoLines" type="text" name="newWord" id="newWord" 
+		       onkeydown="window.handleEnterInWordFld();" />
+
+      <button class="normal" onclick="window.sendNewRootWordFromTxtFld();">Get New Tree</button>
+    </div>
+    <select id="pulldown" onchange="handleChange(this);">
+      <option value="">Shortcuts:</option>
+      <option value="after">after</option>
+      <option value="also">also</option>
+      <option value="because">because</option>
+      <option value=".">.</option>
+      <option value="what">what</option>
+      <option value="where">where</option>
+      <option value="if">if</option>
+      <option value="must">must</option>
+      <option value="my">my</option>
+      <option value="say">say</option>
+      <option value="we">we</option>
+      <option value="his">his</option>
+      <option value="her">her</option>
+      <option value="every">every</option>
+      <option value="either">either</option>
+    </select>
+
+    <div id="echotree">
+    </div>
+
+    <div class="application" align="center">
+      <input class="twoLines" type="text" name="ticker" id="ticker"/>
+    <!--
+    <button onclick="onCorrect();">That's Right!</button>
+    <button onclick="onIncorrect();">Not That</button>
+    <button onclick="onRestart();">Start Over</button>
+    -->
+    </div>
+
+    <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
+    <script type="text/javascript" src="echoTree.js"></script>
+    <script type="text/javascript" src="manageExperiment.js"></script>
+
+  </body>
+</html>

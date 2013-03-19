@@ -1,0 +1,54 @@
+.node circle {
+    cursor: pointer;
+    fill: #fff;
+    stroke: steelblue;
+    stroke-width: 2px;
+}
+
+.node text {
+    font: 16px sans-serif;
+}
+
+path.link {
+    fill:none;
+    stroke: #ccc;
+    stroke-width: 2px;
+}           
+
+div.application {
+    border:2px solid;
+    border-radius:25px;
+    background-color:Coral;
+    margin:30px;
+}
+
+textarea {
+    background-color:Chocolate;
+    width:500px;
+    margin:30px;
+}
+button.bigButton {
+    height:60px;
+    width:80px;
+    background-color:Chocolate;
+    color:Cornsilk;
+    padding:10px 10px;
+    margin:20px;
+}
+button.scary {
+    background-color:Black;
+    color:Cornsilk;
+    margin-left:100px;
+}
+
+button.normal {
+    background-color:Chocolate;
+    color:Cornsilk;
+    height:30px;
+}
+input.twoLines {
+    height:30px;
+    width:500px;
+    background-color:Chocolate;
+    margin:30px;
+}
