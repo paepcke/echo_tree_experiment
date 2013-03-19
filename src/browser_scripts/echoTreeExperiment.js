@@ -64,10 +64,10 @@ if(typeof(WebSocket)!=="undefined") {
 	// Children are visible, followWordObjs are not.
 	// Expand turns everything into children.
 	function expand(d) {
-	    console.log('expanding ' + d.word);
+	    //console.log('expanding ' + d.word);
 	    if (d.followWordObjs) {
 		if (d.followWordObjs.length > 0) {
-		    console.log(' * expanding fwos')
+		    //console.log(' * expanding fwos')
 		    d.children = d.followWordObjs;
 		    d.followWordObjs = null;
 		    d.children.forEach(expand)
@@ -246,6 +246,10 @@ function toggle(d) {
 
 // Sean Code below
 // Class to handle a ticker.
+
+// Propagate: optional, defaults to true. If set to false, insertion 
+//            of a word into the ticker will not be reported to the
+//             experiment manager. Used to avoid infinite recursion.
 var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var el = d3.select("#" + id)
 	.style("width", tickerLength + "px");
@@ -253,7 +257,8 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var t = {}, words = [],
     content = "";
 
-    t.addWord = function(word) {
+    t.addWord = function(word, propagate) {
+	propagate = typeof propagate !== 'undefined' ? propagate : true;
 	words.push(word);
 	content = words.join(wordDelimiter);
 	if (content.length > maxChars) {
@@ -261,6 +266,8 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	    content = words.join(wordDelimiter);
 	}
 	t.update();
+	if (propagate)
+	    expManager.onwordadded(word);
     };
 
     t.update = function() {
@@ -295,8 +302,9 @@ function textMouseDown(node, el) {
 }
 
 // Add a word to the ticker.
-function addToTicker(word) {
-    wordTicker.addWord(word);
+function addToTicker(word, propagate) {
+    propagate = typeof propagate !== 'undefined' ? propagate : true;
+    wordTicker.addWord(word, propagate);
 }
 
 // Handle change event on selection widget.

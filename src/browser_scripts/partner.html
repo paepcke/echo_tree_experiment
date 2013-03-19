@@ -8,6 +8,7 @@
 
   </head>
   <body>
+    <div class=application id=playerID>You play the conversation partner</div>
     <div class=application id=userMsg>
       New word: <input class="twoLines" type="text" name="newWord" id="newWord" 
 		       onkeydown="window.handleEnterInWordFld();" />
@@ -45,8 +46,17 @@
     -->
     </div>
 
+    <!-- Define a global var that holds the experiment manager,
+	 so that everyone can report to him. This var will be
+	 initialized by managerExperiment.js -->
+    <script type="text/javascript">var expManager;</script>
+
+    <!-- This Web interface is for the conversation partner,
+	 not the disabled person: -->
+    <script type="text/javascript">var whoami = "partner";</script>
+
     <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
-    <script type="text/javascript" src="echoTree.js"></script>
+    <script type="text/javascript" src="echoTreeExperiment.js"></script>
     <script type="text/javascript" src="manageExperiment.js"></script>
 
   </body>

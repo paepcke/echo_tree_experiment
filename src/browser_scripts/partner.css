@@ -19,7 +19,7 @@ div.application {
     border:2px solid;
     border-radius:25px;
     background-color:Steelblue;
-    margin:30px;
+    margin:10px;
     padding-left:5px;
     padding-right:5px;
     color:Cornsilk;
@@ -29,6 +29,11 @@ textarea {
     background-color:LightSkyBlue;
     width:500px;
     margin:30px;
+}
+
+#playerID {
+    padding-left: 15px;
+    color:Cornsilk;
 }
 
 select {

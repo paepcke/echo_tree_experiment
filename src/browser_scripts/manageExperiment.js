@@ -1,6 +1,7 @@
 ExperimentManager = function() {
 
     this.wsExp;
+    var DONT_PROPAGATE = false;
 
     this.connect = function() {
 	var expManager = this;
@@ -33,13 +34,13 @@ ExperimentManager = function() {
 
 	if (cmdStr.length == 0)
 	    return;
-	var cmdArr = cmdStr.split();
+	var cmdArr = cmdStr.split(":");
 	cmdOp = cmdArr.shift();
 
 	switch (cmdOp) {
 	case "test":
 	    alert("Got test message");
-	    wsExp.send("test: Got it.");
+	    wsExp.send("test: " + whoami + " got it.");
 	    break;
 	case "showMsg":
 	    var msg = cmdArr.shift();
@@ -51,9 +52,13 @@ ExperimentManager = function() {
 	    var wordToAdd = cmdArr.shift();
 	    if (wordToAdd === undefined)
 		return;
-	    addToTicker(wordToAdd);
+	    addToTicker(wordToAdd, DONT_PROPAGATE);
 	    break;
 	}
+    }
+
+    this.onwordadded = function(word) {
+	this.send("addWord:" + word);
     }
 
     this.send = function(msgStr) {
@@ -61,5 +66,5 @@ ExperimentManager = function() {
     }
 }
 
-var expManager = new ExperimentManager();
+expManager = new ExperimentManager();
 expManager.connect();

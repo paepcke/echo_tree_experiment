@@ -6,11 +6,11 @@
   </head>
   <body>
 
-    <div class=application align="center">
-
+    <div class=application id=playerID>You play the disabled person.</div>
+    <div class=application>
       <textarea name="allText" rows="10" cols="50" readonly>
 	Text to communicate will appear here.
-      </textarea><br>
+      </textarea>
     </div>
 
     <div id=echotree>
@@ -26,8 +26,18 @@
 
     </div>
 
+    <!-- Define a global var that holds the experiment manager,
+	 so that everyone can report to him. This var will be
+	 initialized by managerExperiment.js -->
+    <script type="text/javascript">var expManager;</script>
+
+    <!-- This Web interface is for the disabled person,
+	 not the conversation parner: -->
+    <script type="text/javascript">var whoami = "disabled";</script>
+
+
     <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
-    <script type="text/javascript" src="echoTree.js"></script>
+    <script type="text/javascript" src="echoTreeExperiment.js"></script>
     <script type="text/javascript" src="manageExperiment.js"></script>
 
   </body>

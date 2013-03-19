@@ -26,7 +26,13 @@ textarea {
     background-color:Chocolate;
     width:500px;
     margin:30px;
+    align-horizontal:center;
 }
+
+#playerID {
+
+}
+
 button.bigButton {
     height:60px;
     width:80px;

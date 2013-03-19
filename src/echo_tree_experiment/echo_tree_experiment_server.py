@@ -84,14 +84,7 @@ class EchoTreeLogService(WebSocketHandler):
         # Event that will be set when subject performs an
         # action that requires response action on the partner's browser.
 #        # Thread SubjectActionThread will wait for this event:
-        self.newEchoTreeEvent = Event();
-        
-        # Go wait for new-tree updates:
-        #*****EchoTreeLogService.SubjectActionThread(self).start();
-    
-#    def subscribeToNewTrees(self, handler):
-#        with EchoTreeLogService.activeHandlersChangeLock:
-#            EchoTreeLogService.activeHandlers.append(handler);
+#        self.newEchoTreeEvent = Event();
     
     def allow_draft76(self):
         '''
@@ -111,6 +104,7 @@ class EchoTreeLogService(WebSocketHandler):
             # Deliver the current tree to the subscribing browser:
             try:
                 self.write_message("test");
+                self.selfTest.append('sentMsgToPartner');
             except Exception as e:
                 EchoTreeLogService.log("Error during send of current EchoTree to %s (%s) during initial subscription: %s" % (self.request.host, self.request.remote_ip, `e`));
         
@@ -128,6 +122,11 @@ class EchoTreeLogService(WebSocketHandler):
         if (msgArr[0] == 'test'):
             self.selfTest.append('partnerSubjectResponded');
             return;
+        if (msgArr[0] == 'addWord'):
+            if (len(msgArr) < 2):
+                return;
+            word = msgArr[1];
+            self.notifyInterestedParties("addWord:" + word, exceptions=[self]);
     
     def on_close(self):
         '''
@@ -160,14 +159,16 @@ class EchoTreeLogService(WebSocketHandler):
             sys.stdout.write(theStr + '\n');
     
     @staticmethod
-    def notifyInterestedParties():
+    def notifyInterestedParties(msg, exceptions=[]):
         '''
-        Called from other threads to set the new-EchoTree-arrived event flags
-        for all instances of EchoTreeLogService.  
+        Called from other threads to send the given information
+        to all registered parties, but not  itself.
         '''
         with EchoTreeLogService.activeHandlersChangeLock:
             for handler in EchoTreeLogService.activeHandlers:
-                handler.newEchoTreeEvent.set();
+                if (not handler in exceptions):
+                    handler.write_message(msg);
+                    EchoTreeLogService.log("Message to participant: " + msg);
     
     class SubjectActionThread(Thread):
         '''
