@@ -2,6 +2,7 @@ ExperimentManager = function() {
 
     this.wsExp;
     var DONT_PROPAGATE = false;
+    var NO_WORD_SEPARATOR = false;
 
     this.connect = function() {
 	var expManager = this;
@@ -54,12 +55,24 @@ ExperimentManager = function() {
 		return;
 	    addToTicker(wordToAdd, DONT_PROPAGATE);
 	    break;
+	case "addLetter":
+	    var letterToAdd = cmdArr.shift();
+	    if (letterToAdd === undefined)
+		return;
+	    addToTicker(letterToAdd, DONT_PROPAGATE, NO_WORD_SEPARATOR);
+	    break;
 	}
     }
 
     this.onwordadded = function(word) {
 	this.send("addWord:" + word);
     }
+
+    this.ontickertyped = function(evt) {
+	if (whoami === "disabledRole")
+	    expManager.send("addLetter:" + String.fromCharCode(evt.keyCode));
+    }			    
+    document.getElementById("ticker").onkeypress = this.ontickertyped;
 
     this.send = function(msgStr) {
 	wsExp.send(msgStr);

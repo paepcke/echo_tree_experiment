@@ -246,9 +246,11 @@ function toggle(d) {
 // Sean Code below
 // Class to handle a ticker.
 
-// Propagate: optional, defaults to true. If set to false, insertion 
+// propagate: optional, defaults to true. If set to false, insertion 
 //            of a word into the ticker will not be reported to the
-//             experiment manager. Used to avoid infinite recursion.
+//            experiment manager. Used to avoid infinite recursion.
+//            Default: true;
+// addWordSeparator: add a space after the word, or not. Default: true.
 var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var el = d3.select("#" + id)
 	.style("width", tickerLength + "px");
@@ -256,13 +258,20 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var t = {}, words = [],
     content = "";
 
-    t.addWord = function(word, propagate) {
+    t.addWord = function(word, propagate, addWordSeparator) {
 	propagate = typeof propagate !== 'undefined' ? propagate : true;
+	addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
 	words.push(word);
-	content = words.join(wordDelimiter);
+	if (addWordSeparator)
+	    content = words.join(wordDelimiter);
+	else
+	    content = words.toString();
 	if (content.length > maxChars) {
 	    words.shift();
-	    content = words.join(wordDelimiter);
+	    if (addWordSeparator)
+		content = words.join(wordDelimiter);
+	    else
+		content = words.toString();
 	}
 	t.update();
 	if (propagate)
@@ -301,9 +310,10 @@ function textMouseDown(node, el) {
 }
 
 // Add a word to the ticker.
-function addToTicker(word, propagate) {
+function addToTicker(word, propagate, addWordSeparator) {
     propagate = typeof propagate !== 'undefined' ? propagate : true;
-    wordTicker.addWord(word, propagate);
+    addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
+    wordTicker.addWord(word, propagate, addWordSeparator);
 }
 
 // Handle change event on selection widget.

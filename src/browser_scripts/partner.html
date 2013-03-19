@@ -1,6 +1,6 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
    "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<html title="PartnerRole">
   <head>
 
     <link rel="stylesheet" href="partner.css" type="text/css" />
@@ -15,6 +15,9 @@
 
       <button class="normal" onclick="window.sendNewRootWordFromTxtFld();">Get New Tree</button>
     </div>
+
+<!-- This section would add the shortcut fill words:
+
     <select id="pulldown" onchange="handleChange(this);">
       <option value="">Shortcuts:</option>
       <option value="after">after</option>
@@ -33,7 +36,7 @@
       <option value="every">every</option>
       <option value="either">either</option>
     </select>
-
+-->
     <div id="echotree">
     </div>
 
@@ -53,7 +56,7 @@
 
     <!-- This Web interface is for the conversation partner,
 	 not the disabled person: -->
-    <script type="text/javascript">var whoami = "partner";</script>
+    <script type="text/javascript">var whoami = "partnerRole";</script>
 
     <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
     <script type="text/javascript" src="echoTreeExperiment.js"></script>
