@@ -261,22 +261,25 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     t.addWord = function(word, propagate, addWordSeparator) {
 	propagate = typeof propagate !== 'undefined' ? propagate : true;
 	addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
-	words.push(word);
 	if (addWordSeparator)
-	    content = words.join(wordDelimiter);
+	    words.push(wordDelimiter.concat(word));
 	else
-	    content = words.toString();
-	if (content.length > maxChars) {
-	    words.shift();
-	    if (addWordSeparator)
-		content = words.join(wordDelimiter);
-	    else
-		content = words.toString();
-	}
+	    words.push(word);
+	content = t.arrToContent(words);
 	t.update();
+	document.getElementById("ticker").value = content;
+	//el.value = content;
 	if (propagate)
 	    expManager.onwordadded(word);
     };
+
+    t.arrToContent = function(wordArray) {
+	var newContent = "";
+	wordArray.forEach(function(element, index, array) {
+	    newContent = newContent.concat(element);
+	});
+	return newContent;
+    }
 
     t.update = function() {
 	el.attr("value", content);
