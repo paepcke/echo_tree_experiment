@@ -261,6 +261,9 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     t.addWord = function(word, propagate, addWordSeparator) {
 	propagate = typeof propagate !== 'undefined' ? propagate : true;
 	addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
+
+	words = document.getElementById("ticker").value = content.split();
+
 	if (addWordSeparator)
 	    words.push(wordDelimiter.concat(word));
 	else
