@@ -35,7 +35,7 @@ class WordDatabase(object):
         
     def close(self):
         pass;
-
+    
 # ------------------------------- class Word Follower ---------------------
 class WordFollower(object):
     '''

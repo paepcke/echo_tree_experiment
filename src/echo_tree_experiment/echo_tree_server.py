@@ -31,7 +31,10 @@ ECHO_TREE_GET_PORT = 5001;
 ECHO_TREE_NEW_ROOT_PORT = 5002;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
-DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+#DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+scriptDir = os.path.realpath(os.path.dirname(__file__)); 
+DBPATH_DMOZ_RECREATION = os.path.join(scriptDir, "Resources/dmozRecreation.db");
+DBPATH_DMOZ_GOOGLE = os.path.join(scriptDir, "Resources/google.db");
 
 SCRIPT_REQUEST_URI_PATH = r"/request_echo_tree_script";
 NEW_TREE_SUBMISSION_URI_PATH = r"/submit_new_echo_tree";
@@ -40,6 +43,58 @@ ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 # Name of script to serve on ECHO_TREE_SCRIPT_SERVER_PORT. 
 # Fixed script intended to subscribe to the EchoTree event server: 
 TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
+
+# -----------------------------------------  Event subclass that adds event flavors --------------------
+
+class FlavoredEvent(Event):
+    '''
+    Subclass of Threading.Event, which allows events of multiple
+    types controlled by a single event flag. Each set() is a
+    setting of the flag for one flavor. The wait() method is
+    not overridden, so the setting of any flavor will wake a
+    thread that is waiting for the event instance. The method
+    hotFlavors() can then be used to service all flavors, or 
+    just an individual one. Method clear() clears the flag for
+    just one flavor at a time.
+    '''
+    
+    def __init__(self):
+        super(FlavoredEvent, self).__init__();
+        self.flavorsLock = Lock();
+        self.flavors = {}
+        
+    def set(self, flavor):
+        '''
+        Set this event flag for one flavor.
+        @param flavor: Any object that can be used as a dictionary key.
+        @type flavor: Object
+        '''
+        with self.flavorsLock:
+            self.flavors[flavor] = True;
+        super(FlavoredEvent, self).set();
+        
+    def clear(self, flavor):
+        '''
+        Clear this event flag for the given flavor.
+        @param flavor: Any object that can be used as a dictionary key.
+        @type flavor: Object
+        '''
+        with self.flavorsLock:
+            self.flavors[flavor] = False;
+        super(FlavoredEvent, self).clear();
+
+    def hotFlavors(self):
+        '''
+        Return an array of all flavor objects that are currently True.
+        @return: array of flavors that have been set via set().
+        @rtype: [Object]
+        '''
+        hotFlavors = [];
+        with self.flavorsLock:
+            for flavor in self.flavors.keys():
+                if self.flavors[flavor]:
+                    hotFlavors.append(flavor);
+        return hotFlavors;
 
 # -----------------------------------------  Top Level Service Provider Classes --------------------
 

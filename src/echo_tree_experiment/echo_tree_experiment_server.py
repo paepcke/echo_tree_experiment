@@ -15,6 +15,7 @@ import sys;
 import time;
 import socket;
 import argparse;
+import urlparse;
 import datetime;
 from threading import Event, Lock, Thread;
 
@@ -44,6 +45,31 @@ JS_MIME   = "application/javascript";
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
 
+# -----------------------------------------  Classes ExperimentPair, ParagraphScore --------------------
+
+class ExperimentDyad(object):
+    
+    def __init__(self, player1Name, player2Name):
+        self.player1Name = player1Name
+        self.player2Name = player2Name
+        
+        # All ParagraphScore instances for this dyad
+        self.parScores = [];
+        
+class ParagraphScore(object):
+    
+    def __init__(self, parContent):
+        '''
+        @param parContent: Content of the paragraph being scored
+        @type parContent: String
+        '''
+        self.parContent = parContent;
+        self.numGoodGuesses = 0;
+        # Words typed by the disabled:
+        self.typedWords = "";
+        # Words inserted via clicking on a word in the tree:
+        self.insertedWords = "";
+
 # -----------------------------------------  Top Level Service Provider Classes --------------------
 
 class EchoTreeLogService(WebSocketHandler):
@@ -71,6 +97,8 @@ class EchoTreeLogService(WebSocketHandler):
     # provided (and not just sys.stdout), then logging occurs to
     # that FD *and* to the console. Else just to the concole:
     logToConsole = False;
+    
+    
     
     def __init__(self, application, request, **kwargs):
         '''
@@ -127,14 +155,22 @@ class EchoTreeLogService(WebSocketHandler):
         if (len(subjectMsg) == 0):
             return;
         msgArr = subjectMsg.split(':');
+        
         if (msgArr[0] == 'test'):
             self.selfTest.append('partnerSubjectResponded');
             return;
+        
+        # Is browser asking for the experimental condition it's under? 
+        if (msgArr[0] == 'getExpCond'):
+            self.write_message(*******))
+            
         if (msgArr[0] == 'addWord'):
             if (len(msgArr) < 2):
                 return;
             word = msgArr[1];
             self.notifyInterestedParties("addWord:" + word, exceptions=[self]);
+    
+    
     
     def on_close(self):
         '''
@@ -197,14 +233,14 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
         @param request: instance holding information about the request
         @type request: tornado.httpserver.HTTPRequest
         '''
-        # Path to the directory with all the material we serve. 
-        #Should probably just load that once, but this request is not frequent. 
-        scriptDir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+        # Path to the directory with all the material we serve.
+        #Should probably just load that once, but this request is not frequent.
+        scriptDir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                   "../browser_scripts/");
         if (request.path == "/"):
             scriptPath = os.path.join(scriptDir, "index.html");
-        else: 
-            scriptPath = os.path.join(scriptDir, request.path[1:]); 
+        else:
+            scriptPath = os.path.join(scriptDir, request.path[1:]);
 
         mimeType = HTML_MIME;
         if (request.path == "/disabled.css" or request.path == "/partner.css"):
@@ -215,7 +251,7 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
             mimeType = JS_MIME;
             #self.set_header("Content-Type", "application/x-javascript; charset=UTF-8");
 
-            
+
         # Create the response and the HTML page string:
         reply =  "HTTP/1.1 200 OK\r\n" +\
                  "Content-Type, " + mimeType + "\r\n" +\
@@ -229,7 +265,6 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
         request.write(reply);
         #self.set_header("Content-Type", mimeType);
         request.finish();
-        
         
 # --------------------  Request Handler Class for browsers requesting the JavaScript that knows to open a disabled or partner connection ---------------
 
