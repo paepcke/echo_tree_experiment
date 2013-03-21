@@ -135,11 +135,6 @@ class EchoTreeLogService(WebSocketHandler):
                 return;
             word = msgArr[1];
             self.notifyInterestedParties("addWord:" + word, exceptions=[self]);
-        if (msgArr[0] == 'addLetter'):
-            if (len(msgArr) < 2):
-                return;
-            word = msgArr[1];
-            self.notifyInterestedParties("addLetter:" + word, exceptions=[self]);
     
     def on_close(self):
         '''

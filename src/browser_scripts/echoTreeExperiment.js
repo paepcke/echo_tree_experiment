@@ -246,11 +246,6 @@ function toggle(d) {
 // Sean Code below
 // Class to handle a ticker.
 
-// propagate: optional, defaults to true. If set to false, insertion 
-//            of a word into the ticker will not be reported to the
-//            experiment manager. Used to avoid infinite recursion.
-//            Default: true;
-// addWordSeparator: add a space after the word, or not. Default: true.
 var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var el = d3.select("#" + id)
 	.style("width", tickerLength + "px");
@@ -258,16 +253,33 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var t = {}, words = [],
     content = "";
 
-    t.addWord = function(word, propagate, addWordSeparator) {
+    // addWord()
+    // propagate: optional, defaults to true. If set to false, insertion 
+    //            of a word into the ticker will not be reported to the
+    //            experiment manager. Used to avoid infinite recursion.
+    //            Default: true;
+    // appendString: if true, the given word is appended to the ticker widget. Otherwise
+    //            we assume the ticker already contains the new information (because
+    //            the user typed it), and we just have to propagate to the remote
+    //            server, or otherwise do bookkeeping:
+    // prependDelimiter: if true, the given word is prepended with a delimiter.
+
+    t.addWord = function(word, propagate, appendString, prependDelimiter) {
 	propagate = typeof propagate !== 'undefined' ? propagate : true;
-	addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
+	appendString = typeof appendString !== 'undefined' ? appendString : true;
+	prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
 
 	words = document.getElementById("ticker").value = content.split();
 
-	if (addWordSeparator)
+	// Implement backspace
+	if (word === "0x08") {
+	    lastWord = words[words.length - 1];
+	    words[words.length - 1] = lastWord.slice(0, -1);
+	} else if (prependDelimiter)
 	    words.push(wordDelimiter.concat(word));
 	else
 	    words.push(word);
+
 	content = t.arrToContent(words);
 	t.update();
 	document.getElementById("ticker").value = content;
@@ -312,17 +324,21 @@ function colorAllLabels(color) {
 // On mouse down, color label, add word to ticker.
 function textMouseDown(node, el) {
     colorLabel(el, fillColor);
-    addToTicker(node.word);
+    if (whoami === "disabledRole")
+	addToTicker(node.word);
 }
 
 // Add a word to the ticker.
-function addToTicker(word, propagate, addWordSeparator) {
+function addToTicker(word, propagate, appendString, prependDelimiter) {
     propagate = typeof propagate !== 'undefined' ? propagate : true;
-    addWordSeparator = typeof addWordSeparator !== 'undefined' ? addWordSeparator : true;
-    wordTicker.addWord(word, propagate, addWordSeparator);
+    appendString = typeof appendString !== 'undefined' ? appendString : true;
+    prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
+    wordTicker.addWord(word, propagate, appendString, prependDelimiter);
 }
 
 // Handle change event on selection widget.
+// Only add word from tree to ticker if
+// player is the disabled person.
 function handleChange(select) {
     addToTicker(select.value);
 }
