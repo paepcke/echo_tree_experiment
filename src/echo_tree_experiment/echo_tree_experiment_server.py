@@ -8,6 +8,22 @@ Module holding three servers:
       This server pushes new EchoTrees as they arrive via (2.). The subscription is initiated
       by the served JavaScript (for example.)
 For ports, see constants below.
+
+Protocol:
+   Player to server:
+       addWord: <wordTyped>
+       goodGuessClicked:       # Only sent by disabled. Server records the click in the score, and also notifies partner 
+       login: role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
+       parDone: <parID>        # Only sent by disabled. Server records event, and returns a new par, or "done:".
+                               # <parId> is -1 one for the first call that asks for the first paragraph.  
+       test:
+   Server to player:
+       dyadComplete:          # to both disabled and partner when both players logged in.
+       done:                  # the session is finished. Sent to both disabled and partner
+       goodGuessClicked:      # only to partner. Action by browser: show feedback to partner
+       newPar: <parID>|<parStr> # sent only to disabled.
+       newPar:                # This version with no arg is sent to partner to warn of new par.
+       waitForPlayer: <playerID> # One player has logged in, waiting for the other
 '''
 
 import os;
@@ -17,6 +33,7 @@ import socket;
 import argparse;
 import urlparse;
 import datetime;
+import random;
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -31,6 +48,9 @@ HOST = socket.getfqdn();
 ECHO_TREE_PAGE_SERVICE_PORT = 5003
 ECHO_TREE_EXPERIMENT_SERVICE_PORT = 5004;
 
+# Number of paragraphs to communicate during one game:
+NUM_OF_PARS_PER_SESSION = 10;
+
 DISABLED_PAGE_NAME = "disabled.html";
 PARTNER_PAGE_NAME = "partner.html";
 DISABLED_CSS_NAME = "disabled.css";
@@ -42,33 +62,174 @@ HTML_MIME = "text/html";
 CSS_MIME  = "text/css";
 JS_MIME   = "application/javascript";
 
+SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__));
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
-DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+#DBPATH = os.path.join(SCRIPT_DIR, "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+RECREATION_DB_PATH = os.path.join(SCRIPT_DIR, "Resources/dmozRecreation.db");
+#GOOGLE_DB_PATH = os.path.join(SCRIPT_DIR, "Resources/googleNgrams.db");
+
+PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
+
+CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
+
+class Condition:
+    RECREATION_NGRAMS = 0;
+    GOOGLE_NGRAMS     = 1;
+
+class Role:
+    DISABLED = 0;
+    PARTNER  = 1;
 
 # -----------------------------------------  Classes ExperimentPair, ParagraphScore --------------------
 
 class ExperimentDyad(object):
     
-    def __init__(self, player1Name, player2Name):
-        self.player1Name = player1Name
-        self.player2Name = player2Name
+    def __init__(self, theInstantiatingHandler, instantiatorRole, disabledID, partnerID):
+        '''
+        Creates a new ExperimentDyad.
+        @param theInstantiatingHandler:
+        @type theInstantiatingHandler:
+        @param disabledID:
+        @type disabledID:
+        @param partnerID:
+        @type partnerID:
+        '''
+        self.disabledID   = disabledID;
+        self.partnerID    = partnerID;
+        self.instantiatorRole = instantiatorRole;
+        self.dyadLoggedIn = False;
+        self.thisHandler  = theInstantiatingHandler;
+        if instantiatorRole == 'disabledRole':
+            self.disabledHandler = theInstantiatingHandler;
+            self.partnerHandler  = None;
+        else:
+            self.partnerHandler  = theInstantiatingHandler;
+            self.disabledHandler = None;
+        self.thatHandler  = None;
+        self.condition    = None;
         
         # All ParagraphScore instances for this dyad
         self.parScores = [];
         
+        # All the paragraphs used by this dyad before.
+        # Keys are integers between 0 and the number of
+        # paragraphs in file PARAGRAPHS_PATH. That
+        # file is internalized into EchoTreeLogServices.paragraphs:
+        self.parsUsed  = {};
+
+    def currentParScore(self):
+        return self.parScores[-1];
+        
+    def disabledID(self):
+        return self.disabledID;
+    
+    def partnerID(self):
+        return self.partnerID;
+    
+    def condition(self): 
+        return self.condition;
+    
+    def setCondition(self, condition):
+        self.condition = condition;
+    
+    def isDyadLoggedIn(self):
+        return self.dyadLoggedIn;
+
+    def setDyadLoggedIn(self):
+        self.dyadLoggedIn = True;
+        
+    def getThisHandler(self):
+        return self.thisHandler;
+
+    def getThatHandler(self):
+        return self.thatHandler;
+    
+    def getDisabledHandler(self):
+        return self.disabledHandler;
+    
+    def getPartnerHandler(self):
+        return self.partnerHandler;
+    
+    def setThatHandler(self, handler):
+        self.thatHandler = handler;
+        if self.disabledHandler is None:
+            self.disabledHandler = handler;
+        else:
+            self.partnerHandler  = handler;
+
+    def getNewParScore(self):
+        '''
+        Returns a random paragraph for a dyad to work on.
+        Guarantees that this dyad has never seen that par.
+        @return: paragraph ID
+        @rtype: int
+        '''
+        if len(self.parsUsed) >= NUM_OF_PARS_PER_SESSION:
+            return None;
+        while True:
+            newParID = random.randint(0,len(EchoTreeLogService.paragraphs) - 1);
+            try:
+                self.parsUsed[newParID];
+                # If we didn't bomb out, we used this par
+                # already:
+                continue;
+            except KeyError:
+                self.parsUsed[newParID] = True;
+                return newParID; 
+
+    def saveToCSV(self, outfilePath):
+        '''
+        Outputs one session's outcome to CSV with this schema:
+        Disabled,Partner,Condition, parID_i, StartTime_i, EndTime_i, GoodnessClicks_i, NumLettersTyped_i
+        @param outfile: path to csv file that is already prepared with a header.
+        @type outfile: String
+        '''
+        with open(outfile, 'a') as fd:
+            fd.write(self.disabledID() + ',' + self.partnerID() + ',' +  self.condition() + ',');
+            for i in range(len(self.parScores)):
+                parScore = self.parScores[i];
+                # Compute number of letters typed: each word that was
+                # inserted from the tree counts only for one letter:
+                numLetters = len(parScore.typedWords);
+                for word in parScore.insertedWords:
+                    numLetters -= len(word) - 1; # -1 is to count one of the letters.
+                fd.write(str(parScore.parID) +\
+                         str(parScore.startTime) + ',' +\
+                         str(parScore.stopTime) + ',' +\
+                         str(parScore.numGoodGuesses) + ',' +\
+                         str(numLettersTyped));
+        
 class ParagraphScore(object):
     
-    def __init__(self, parContent):
+    def __init__(self, condition, parID, disabled, partner):
         '''
         @param parContent: Content of the paragraph being scored
         @type parContent: String
         '''
-        self.parContent = parContent;
+        self.parID            = parID;
+        self.disabledPlayer   = disabled;
+        self.partnerPlayer    = partner;
+        self.condition        = condition;
+        self.startTime        = 0L;
+        self.endTime          = 0L; 
+        
         self.numGoodGuesses = 0;
         # Words typed by the disabled:
         self.typedWords = "";
         # Words inserted via clicking on a word in the tree:
-        self.insertedWords = "";
+        self.insertedWords = [];
+        
+    def addInsertedWord(self, word):
+        self.insertedWords.append(word);
+        
+    def addGoodnessClick(self):
+        self.numGoodGuesses += 1;
+        
+    def setStartTime(self):
+        self.startTime = time.time();
+
+    def setStopTime(self):
+        self.stopTime = time.time();
 
 # -----------------------------------------  Top Level Service Provider Classes --------------------
 
@@ -79,6 +240,16 @@ class EchoTreeLogService(WebSocketHandler):
     connection.
     '''
     
+    # Array of paragraphs to choose from:
+    paragraphs = None;
+    
+    # Dict of dyads keyed by player. Values are ExperimentDyad
+    # instances in which the keyed player participated in. Each dyad instance
+    # is represented in two value lists, once in the value for each player.
+    # However, the instances are the same object in both
+    # cases:
+    dyads = {};
+    
     # Class-level list of handler instances: 
     activeHandlers = [];
     # Lock to make access to activeHanlders data struct thread safe:
@@ -86,6 +257,9 @@ class EchoTreeLogService(WebSocketHandler):
     
     # Lock for changing the current EchoTree:
     currentEchoTreeLock = Lock();
+    
+    # Lock protecting access to dyads dict:
+    dyadLock = Lock();
     
     # Lock for changing the current EchoTree:
 #    currentEchoTreeLock = Lock();
@@ -97,9 +271,7 @@ class EchoTreeLogService(WebSocketHandler):
     # provided (and not just sys.stdout), then logging occurs to
     # that FD *and* to the console. Else just to the concole:
     logToConsole = False;
-    
-    
-    
+        
     def __init__(self, application, request, **kwargs):
         '''
         Invoked when browser accesses this server via ws://...
@@ -116,11 +288,38 @@ class EchoTreeLogService(WebSocketHandler):
         EchoTreeLogService.log("Browser at %s (%s) subscribing to EchoTreeLogService." % (request.host, request.remote_ip));
         
         self.selfTest = [];
-        
+
+        # Read the paragraphs the disabled players have to write
+        # from a file, removing \n with spaces. The pars in the 
+        # file are separated by a newline: 
+        with open(PARAGRAPHS_PATH, 'r') as fd:
+            pars = fd.read().split('\n\n');
+            for i,par in enumerate(pars):
+                pars[i] = pars[i].replace('\n', ' ')
+            EchoTreeLogService.paragraphs = pars; 
+
+        # Find a fresh CSV file to output to:
+        self.gameOutputFilePath = None;
+        outputFileNum = 0;
+        while True:
+            self.gameOutputFilePath = os.path.join(CSV_OUTPUT_DIR, "gameResult_" + str(outputFileNum) + ".csv")
+            if os.path.exists(self.gameOutputFilePath):
+                outputFileNum += 1;
+                continue;
+        # Add the CSV header to the output file:
+        with open(self.gameOutputFilePath, 'w') as fd:
+            fd.write("Disabled,Partner,Condition,");
+            for i in range(NUM_OF_PARS_PER_SESSION):
+                fd.write('ParID_' + str(i) + 'StartTime_' + str(i), 'EndTime_' + str(i), 'GoodnessClicks_' + str(i), 'NumLettersTyped_' + str(i));
+            fd.writeln; 
+
+
         # Register this handler instance as being an active
         # experiment logger:
         with EchoTreeLogService.activeHandlersChangeLock:
             EchoTreeLogService.activeHandlers.append(self);
+
+        self.myDyad = None;
     
     def allow_draft76(self):
         '''
@@ -159,18 +358,48 @@ class EchoTreeLogService(WebSocketHandler):
         if (msgArr[0] == 'test'):
             self.selfTest.append('partnerSubjectResponded');
             return;
+
+        # Is browser reporting the players' email addresses?
+        # Format: login:role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
+        #    or : login:role=partnerFole myEmail=partnerEmail otherEmail=disabledEmail        
+        if (msgArr[0] == 'login'):
+            if (len(msgArr < 2)):
+                EchoTreeLogService.log('Bad setIDs message: no arg provided.');
+                return;
+
+        # Is browser reporting that one paragraph is all done?
+        # (Note this msg is also used when a disabled partner is
+        # asking for its first paragraph. The arg is -1 in that case.
         
-        # Is browser asking for the experimental condition it's under? 
-        if (msgArr[0] == 'getExpCond'):
-            self.write_message(*******))
-            
+
+        # Is disabled-browser telling that it added one word
+        # from the tree down into the ticker?
         if (msgArr[0] == 'addWord'):
             if (len(msgArr) < 2):
+                EchoTreeLogService.log('Bad addWord message: no arg provided.');
                 return;
             word = msgArr[1];
-            self.notifyInterestedParties("addWord:" + word, exceptions=[self]);
-    
-    
+            currScore = self.myDyad.currentParScore().addInsertedWord(word);
+            self.myDyad.getThatHandler().write_message("addWord:" + word);
+
+        if (msgArr[0] == 'goodGuessClicked:'):
+            self.myDyad.currentParScore().addGoodnessClick();
+            # Tell partner so feedback can be given:
+            self.myDyad.getThatHandler().write_message("goodGuessClicked:");
+            
+        if (msgArr[0] == 'parDone:'):
+            self.myDyad.currentParScore().setStopTime();
+            newParID = self.myDyad.getNewPar();
+            if newPar is None:
+                # Game done. All NUM_OF_PARS_PER_SESSION paragraphs have
+                # been communicated:
+                self.write_message('done:');
+                self.myDyad.getThatHandler().write_message('done:');
+                self.myDyad.saveToCSV(self.NUM_OF_PARS_PER_SESSION);
+            else:
+                parContent = EchoTreeLogService.paragraphs[newParID];
+                self.myDyad.getDisabledHandler().write_message('newPar:' + str(newParID) + '|' + parContent);
+                self.myDyad.getPartnerHandler().write_message('newPar:');
     
     def on_close(self):
         '''
@@ -183,6 +412,93 @@ class EchoTreeLogService(WebSocketHandler):
             except:
                 pass
         EchoTreeLogService.log("Browser at %s (%s) now disconnected." % (self.request.host, self.request.remote_ip));
+
+
+    def processLogin(self, msgArr):
+        '''
+        Heavy lifting of matching up dyads as they log in. Called when a 
+        player ('thisPlayer') is opening a connection to this server. The
+        msgArr provides information about the other player this new connection
+        must be matched up with ('thatPlayer') If no existing dyad is found 
+        that pair this player and thatPlayer, a new such dyad is created. 
+        If such an dyad is found, the other player already logged in and the
+        game is ready to go. Note that a player may play multiple games, with
+        different other players. A dict keyed by player keeps track of the
+        resulting multiple dyad instances.  
+        @param msgArr: Argument part of the setIDs msg, which has format 
+                        login:role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
+                    or: login:role=partnerRole myEmail=partnerEmail otherEmail=disabledEmail        
+        @type msgArr: [String]
+        '''
+        argArr = msgArr[1].split(' ');
+        if len(argArr) != 3:
+            EchoTreeLogService.log('Bad login message: not all args provided: ' + subjectMsg);
+            return;
+        roleSpec = argArr[0];
+        
+        if roleSpec.find('=') == -1:
+            EchoTreeLogService.log('Bad login message: bad role spec: ' + str(roleSpec));
+            return;
+        role = roleSpec.split('=')[1];
+        
+        thisEmailSpec = argArr[1];
+        if thisEmailSpec.find('=') == -1:
+            EchoTreeLogService.log('Bad login message: bad thisEmail spec: ' + str(thisEmailSpec));
+            return;
+        thisEmail = thisEmailSpec.split('=')[1];
+
+        thatEmailSpec = argArr[1];
+        if thatEmailSpec.find('=') == -1:
+            EchoTreeLogService.log('Bad login message: bad thatEmail spec: ' + str(thatEmailSpec));
+            return;
+        thatEmail = thatEmailSpec.split('=')[1];
+
+        with EchoTreeLogService.dyadLock:
+            try:
+                thisPlayersDyads = EchoTreeLogService.dyads[thisEmail];
+                for dyad in thisPlayersDyads:
+                    if (thisEmail == dyad.player1ID() and thatEmail == dyad.player2ID()) or \
+                       (thisEmail == dyad.player2ID() and thatEmail == dyad.player1ID()):
+                        # Found waiting dyad:
+                        # The thisHandler was set when dyad was created. Now 
+                        # set that of the partner:
+                        dyad.setThatHandler(self);
+                        if dyad.isDyadLoggedIn():
+                            EchoTreeLogService.log("Player logging into an already logged-in dyad with the same partner: " + str(msgArr));
+                            return;
+                        dyad.setDyadLoggedIn();
+                        EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));
+                        self.write_message('dyadComplete:');
+                        # Notify the already waiting player:
+                        dyad.getThisHandler.write_message("dyadComplete:");
+                        return
+                    
+                # Dyad chain for the player who is checking in was found,
+                # but none of those dyads represented a game of this player with 
+                # that other player. Create a new open dyad and link it to this
+                # player's existing chain of dyads:
+                if role == 'disabledRole':
+                    newDyad = ExperimentDyad(self, role, thisEmail, thatEmail);
+                elif role == 'partnerRole':
+                    newDyad = ExperimentDyad(self, role, thatEmail, thisEmail);
+                self.myDyad = newDyad;
+                EchoTreeLogService.dyads[thisEmail].append(newDyad); 
+                self.write_message("waitForPlayer:" + thatEmail);
+                EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
+                return;
+            except KeyError:
+                # The other player has not logged in yet. Create
+                # a new dyad with this handler as the first argument,
+                # and the player ids as the rest:
+                if role == 'disabledRole':
+                    newDyad = ExperimentDyad(self, role, thisEmail, thatEmail);
+                elif role == 'partnerRole':
+                    newDyad = ExperimentDyad(self, role, thatEmail, thisEmail);                    
+                self.myDyad = newDyad;
+                EchoTreeLogService.dyads[thisEmail] = [newDyad];
+                self.write_message("waitForPlayer:" + thatEmail);
+                EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
+                return;
 
     @staticmethod
     def log(theStr, addTimestamp=True):
@@ -215,6 +531,7 @@ class EchoTreeLogService(WebSocketHandler):
                     EchoTreeLogService.log("Message to participant: " + msg);
     
 # --------------------  Request Handler Class for browsers: serves HTML pages and javascript -------------------
+
 
 class EchoTreeExperimentPageRequestHandler(HTTPServer):
     '''
