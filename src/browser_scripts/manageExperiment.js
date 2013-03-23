@@ -1,6 +1,8 @@
-ExperimentManager = function() {
+var wsExp = undefined;
 
-    this.wsExp;
+function ExperimentManager () {
+
+    var that = this;
     var DONT_PROPAGATE = false;
     var DO_PROPAGATE = true;
     var NO_APPEND = false;
@@ -10,6 +12,8 @@ ExperimentManager = function() {
     var ASCII_BACKSPACE = 8;
     var ASCII_SPACE = 32;
     var ASCII_DEL = 126;
+
+    var currParID = -1;
 
     this.connect = function() {
 	var expManager = this;
@@ -23,7 +27,7 @@ ExperimentManager = function() {
 	    };
 
 	    wsExp.onerror = function () {
-		alert('ERROR: ' + evt.data);
+		this.logError('ERROR: ' + evt.data);
 	    };
 
 	    wsExp.onmessage = function (event) {
@@ -37,6 +41,15 @@ ExperimentManager = function() {
 	    document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
 	}
     }
+
+    this.login = function() {
+	// Log into server:
+	//******that.wsExp.send("login:role=" + whoami + 
+	wsExp.send("login:role=" + "Andreas" + 
+		   " disabledID=" + "****disabled@foo.com" + 
+		   " parterID=" + "****partner@bar.com");
+    }
+
 
     this.execCmd = function(cmdStr) {
 
@@ -52,29 +65,62 @@ ExperimentManager = function() {
 	    break;
 	case "showMsg":
 	    var msg = cmdArr.shift();
-	    if (msg === undefined)
+	    if (msg === undefined) {
+		this.logError("No message included in showMsg.");
 		return;
-	    alert(msg);
+	    }
+	    this.showMsg(msg);
+	    break;
+	case "waitForPlayer":
+	    var missingPlayersID = cmdArr.shift();
+	    if (missingPlayersID === undefined) {
+		this.logError("No missing-player ID provided in waitForPlayer message.");
+		return;
+	    }
+	    this.showMsg("Waiting for player " + missingPlayersID);
+	    break;
+	case "dyadComplete":
+	    this.showMsg("You are both online. Ready to go?");
 	    break;
 	case "addWord":
 	    var wordToAdd = cmdArr.shift();
-	    if (wordToAdd === undefined)
+	    if (wordToAdd === undefined) {
+		this.logError("No word provided in addWord message.");
 		return;
+	    }
 	    if (wordToAdd.length === 1)
 		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
 	    else
 		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
 	    break;
-	case "setTaskText":
-	    var textToAdd = cmdArr.shift();
-	    if (textToAdd === undefined)
+	case "newPar":
+            // On disabled player newPar has form <parID>|<parStr>.
+            // On parnter side form is <topicKeyword>. Distinguish here:
+	    var parInfo = cmdArr.shift();
+	    if (parInfo === undefined) {
+		this.logError("No parID or topicKeyword in newPar message.");
 		return;
-	    document.getElementById("taskText").value= textToAdd;
+	    }
+	    parIDAndParStr = parInfo.split('|');
+	    if (parIDAndParStr.length == 1) {
+		// This player is a partner, arg is topic keyword:
+		this.showMsg("The next paragraph will loosely be about " + parIDAndParStr[0]);
+		return;
+	    }
+	    currParID = parIDAndParStr[0];
+	    document.getElementById("taskText").value= parIDAndParStr[1];
+	    break;
+	case "goodGuessClicked":
+	    this.deliverGoodGuessFeedback();
+	    break;
+	case "done":
+	    this.showMsg("All done. Thank you!");
+	    break;
 	}
     }
 
     this.onwordadded = function(word) {
-	this.send("addWord:" + word);
+	wsExp.send("addWord:" + word);
     }
 
     this.ontickertyped = function(evt) {
@@ -104,15 +150,34 @@ ExperimentManager = function() {
 	else
 	    // Ticker tape is that of the partner: dont' send to disabled player:
 	    addToTicker(charAsStr, DONT_PROPAGATE, NO_APPEND, DONT_PREPEND_DELIMITER);
-    }			    
+    }
+
+    this.onGoodGuessClicked = function () {
+	wsExp.send("goodGuessClicked:");
+    }
+
+    this.onParCompleteClicked = function () {
+	wsExp.send("parDone:" + this.currParID);
+    }
+
+    this.showMsg = function(msg) {
+	alert(msg);
+    }
+
+    this.deliverGoodGuessFeedback = function() {
+	alert("Good guess, 'disabled' player will type more.");
+    }
+
+    this.logError = function(msg) {
+	alert(msg);
+    }
 
     // Bind ticker tape's keyboard presses to ontickertyped:
     document.getElementById("ticker").onkeyup = this.ontickertyped;
+    document.getElementById("partialDone").onclick=this.onGoodGuessClicked;
+    document.getElementById("allDone").onclick=this.onParCompleteClicked;
 
-    this.send = function(msgStr) {
-	wsExp.send(msgStr);
-    }
-}
+} // end ExperimentManager
 
 expManager = new ExperimentManager();
 expManager.connect();

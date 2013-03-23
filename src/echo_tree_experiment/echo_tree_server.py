@@ -16,6 +16,7 @@ import time;
 import socket;
 import argparse;
 import datetime;
+import threading;
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -46,7 +47,7 @@ TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
 
 # -----------------------------------------  Event subclass that adds event flavors --------------------
 
-class FlavoredEvent(Event):
+class FlavoredEvent(threading.Event):
     '''
     Subclass of Threading.Event, which allows events of multiple
     types controlled by a single event flag. Each set() is a

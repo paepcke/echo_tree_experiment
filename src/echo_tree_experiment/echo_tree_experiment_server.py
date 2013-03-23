@@ -13,7 +13,7 @@ Protocol:
    Player to server:
        addWord: <wordTyped>
        goodGuessClicked:       # Only sent by disabled. Server records the click in the score, and also notifies partner 
-       login: role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
+       login: role=disabledRole disabledID=disabledEmail partnerID=partnerEmail
        parDone: <parID>        # Only sent by disabled. Server records event, and returns a new par, or "done:".
                                # <parId> is -1 one for the first call that asks for the first paragraph.  
        test:
@@ -22,8 +22,8 @@ Protocol:
        done:                  # the session is finished. Sent to both disabled and partner
        goodGuessClicked:      # only to partner. Action by browser: show feedback to partner
        newPar: <parID>|<parStr> # sent only to disabled.
-       newPar:                # This version with no arg is sent to partner to warn of new par.
-       waitForPlayer: <playerID> # One player has logged in, waiting for the other
+       newPar: <topicKeyword> # Sent to partner: topic keyword of next paragraph to work on.
+       waitForPlayer: <playerID> # One player has logged in, waiting for the other, whos ID is included
 '''
 
 import os;
@@ -396,10 +396,21 @@ class EchoTreeLogService(WebSocketHandler):
                 self.write_message('done:');
                 self.myDyad.getThatHandler().write_message('done:');
                 self.myDyad.saveToCSV(self.NUM_OF_PARS_PER_SESSION);
+                self.handleGameDone();
+                return;
             else:
                 parContent = EchoTreeLogService.paragraphs[newParID];
-                self.myDyad.getDisabledHandler().write_message('newPar:' + str(newParID) + '|' + parContent);
-                self.myDyad.getPartnerHandler().write_message('newPar:');
+                # Each paragraph starts with a topic keyword, followed by a '|'.
+                # Send the topic to the partner, and the body of the paragraph to
+                # the disabled:
+                topicPlusContent = parContent.split('|');
+                self.myDyad.getDisabledHandler().write_message('newPar:' + str(newParID) + '|' + topicPlusContent[1]);
+                self.myDyad.getPartnerHandler().write_message('newPar:' + topicPlusContent[0]);
+    
+    def handleGameDone(self):
+        #**********
+        # Turn players around.
+        pass
     
     def on_close(self):
         '''
