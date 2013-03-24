@@ -21,15 +21,15 @@ var vis = d3.select("#echotree").append('svg')
     .append('g')
     .attr("transform", "translate(" + m[3] + "," + m[0] + ")");
 
+
 // Check for browser support:
 if(typeof(WebSocket)!=="undefined") {
 
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    //var ws = new WebSocket("ws://duo:5001/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://mono.stanford.edu:5001/subscribe_to_echo_trees");
-    //var ws = new WebSocket("ws://localhost:5001/subscribe_to_echo_trees");
+    //var ws = new WebSocket("ws://mono.stanford.edu:5004/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://localhost:5004/subscribe_to_echo_trees");
 
     ws.onopen = function () {
     };
@@ -90,6 +90,20 @@ if(typeof(WebSocket)!=="undefined") {
     // WebSockets not supported in this browser:
     document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
 }
+
+function getCookie(c_name) {
+    var i,x,y,ARRcookies=document.cookie.split(";");
+    for (i=0;i<ARRcookies.length;i++)
+    {
+	x=ARRcookies[i].substr(0,ARRcookies[i].indexOf("="));
+	y=ARRcookies[i].substr(ARRcookies[i].indexOf("=")+1);
+	x=x.replace(/^\s+|\s+$/g,"");
+	if (x==c_name)
+	{
+	    return unescape(y);
+	}
+    }
+}   
 
 function update(source) {
     
@@ -204,9 +218,11 @@ function sendNewRootWordFromTxtFld() {
 }
 
 // Given a word, tell browser to make that word into the 
-// new root:
+// new root. We pass an array whose first val is the new
+// root word. The remainder are all the player IDs to whom
+// the new tree should be pushed. In this case, both players:
 function sendNewRootWord(word) {
-    ws.send(word);
+    ws.send("newRoot:" + JSON.stringify([word,thisEmail,thatEmail]);
 }
 
 
@@ -355,3 +371,7 @@ function onIncorrect() {
 function onRestart() {
     alert("RESTART");
 }
+
+// Get player IDs for myself and the other player:
+var thisEmail   = this.getCookie("echoTreeThisEmail");
+var otherEmail  = this.getCookie("echoTreeOtherEmail");

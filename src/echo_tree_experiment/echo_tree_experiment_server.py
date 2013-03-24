@@ -77,8 +77,8 @@ class Condition:
     GOOGLE_NGRAMS     = 1;
 
 class Role:
-    DISABLED = 0;
-    PARTNER  = 1;
+    DISABLED = 'disabledRole';
+    PARTNER  = 'partnerRole';
 
 # -----------------------------------------  Classes ExperimentPair, ParagraphScore --------------------
 
@@ -94,12 +94,12 @@ class ExperimentDyad(object):
         @param partnerID:
         @type partnerID:
         '''
-        self.disabledID   = disabledID;
-        self.partnerID    = partnerID;
+        self.theDisabledID   = disabledID;
+        self.thePartnerID    = partnerID;
         self.instantiatorRole = instantiatorRole;
         self.dyadLoggedIn = False;
         self.thisHandler  = theInstantiatingHandler;
-        if instantiatorRole == 'disabledRole':
+        if instantiatorRole == Role.DISABLED:
             self.disabledHandler = theInstantiatingHandler;
             self.partnerHandler  = None;
         else:
@@ -121,10 +121,10 @@ class ExperimentDyad(object):
         return self.parScores[-1];
         
     def disabledID(self):
-        return self.disabledID;
+        return self.theDisabledID;
     
     def partnerID(self):
-        return self.partnerID;
+        return self.thePartnerID;
     
     def condition(self): 
         return self.condition;
@@ -291,27 +291,28 @@ class EchoTreeLogService(WebSocketHandler):
 
         # Read the paragraphs the disabled players have to write
         # from a file, removing \n with spaces. The pars in the 
-        # file are separated by a newline: 
-        with open(PARAGRAPHS_PATH, 'r') as fd:
-            pars = fd.read().split('\n\n');
-            for i,par in enumerate(pars):
-                pars[i] = pars[i].replace('\n', ' ')
-            EchoTreeLogService.paragraphs = pars; 
-
-        # Find a fresh CSV file to output to:
-        self.gameOutputFilePath = None;
-        outputFileNum = 0;
-        while True:
-            self.gameOutputFilePath = os.path.join(CSV_OUTPUT_DIR, "gameResult_" + str(outputFileNum) + ".csv")
-            if os.path.exists(self.gameOutputFilePath):
-                outputFileNum += 1;
-                continue;
-        # Add the CSV header to the output file:
-        with open(self.gameOutputFilePath, 'w') as fd:
-            fd.write("Disabled,Partner,Condition,");
-            for i in range(NUM_OF_PARS_PER_SESSION):
-                fd.write('ParID_' + str(i) + 'StartTime_' + str(i), 'EndTime_' + str(i), 'GoodnessClicks_' + str(i), 'NumLettersTyped_' + str(i));
-            fd.writeln; 
+        # file are separated by a newline:
+#******         
+#        with open(PARAGRAPHS_PATH, 'r') as fd:
+#            pars = fd.read().split('\n\n');
+#            for i,par in enumerate(pars):
+#                pars[i] = pars[i].replace('\n', ' ')
+#            EchoTreeLogService.paragraphs = pars; 
+#
+#        # Find a fresh CSV file to output to:
+#        self.gameOutputFilePath = None;
+#        outputFileNum = 0;
+#        while True:
+#            self.gameOutputFilePath = os.path.join(CSV_OUTPUT_DIR, "gameResult_" + str(outputFileNum) + ".csv")
+#            if os.path.exists(self.gameOutputFilePath):
+#                outputFileNum += 1;
+#                continue;
+#        # Add the CSV header to the output file:
+#        with open(self.gameOutputFilePath, 'w') as fd:
+#            fd.write("Disabled,Partner,Condition,");
+#            for i in range(NUM_OF_PARS_PER_SESSION):
+#                fd.write('ParID_' + str(i) + 'StartTime_' + str(i), 'EndTime_' + str(i), 'GoodnessClicks_' + str(i), 'NumLettersTyped_' + str(i));
+#            fd.writeln; 
 
 
         # Register this handler instance as being an active
@@ -357,21 +358,18 @@ class EchoTreeLogService(WebSocketHandler):
         
         if (msgArr[0] == 'test'):
             self.selfTest.append('partnerSubjectResponded');
+            self.write_message('sendLogin:')
             return;
 
         # Is browser reporting the players' email addresses?
         # Format: login:role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
         #    or : login:role=partnerFole myEmail=partnerEmail otherEmail=disabledEmail        
         if (msgArr[0] == 'login'):
-            if (len(msgArr < 2)):
+            if (len(msgArr) < 2):
                 EchoTreeLogService.log('Bad setIDs message: no arg provided.');
                 return;
-
-        # Is browser reporting that one paragraph is all done?
-        # (Note this msg is also used when a disabled partner is
-        # asking for its first paragraph. The arg is -1 in that case.
-        
-
+            self.processLogin(msgArr);
+            
         # Is disabled-browser telling that it added one word
         # from the tree down into the ticker?
         if (msgArr[0] == 'addWord'):
@@ -387,6 +385,9 @@ class EchoTreeLogService(WebSocketHandler):
             # Tell partner so feedback can be given:
             self.myDyad.getThatHandler().write_message("goodGuessClicked:");
             
+        # Is browser reporting that one paragraph is all done?
+        # (Note this msg is also used when a disabled partner is
+        # asking for its first paragraph. The arg is -1 in that case.
         if (msgArr[0] == 'parDone:'):
             self.myDyad.currentParScore().setStopTime();
             newParID = self.myDyad.getNewPar();
@@ -456,20 +457,47 @@ class EchoTreeLogService(WebSocketHandler):
         if thisEmailSpec.find('=') == -1:
             EchoTreeLogService.log('Bad login message: bad thisEmail spec: ' + str(thisEmailSpec));
             return;
-        thisEmail = thisEmailSpec.split('=')[1];
+        disabledEmail = thisEmailSpec.split('=')[1];
 
-        thatEmailSpec = argArr[1];
+        thatEmailSpec = argArr[2];
         if thatEmailSpec.find('=') == -1:
             EchoTreeLogService.log('Bad login message: bad thatEmail spec: ' + str(thatEmailSpec));
             return;
-        thatEmail = thatEmailSpec.split('=')[1];
+        partnerEmail = thatEmailSpec.split('=')[1];
+        if role == Role.DISABLED:
+            thisEmail = disabledEmail;
+            thatEmail = partnerEmail
+        else:
+            thisEmail = partnerEmail;
+            thatEmail  = disabledEmail;
+
+        if thisEmail == thatEmail:
+            # Something wrong. To recover, check whether any open
+            # dyad involves this player. If so, delete that dyad:
+            try:
+                defectivePlayersDyads = EchoTreeLogService.dyads[thisEmail];
+                if defectivePlayersDyads is not None:
+                    newDyadChain = [];
+                    for dyad in defectivePlayersDyads:
+                        if dyad.isDyadLoggedIn():
+                            newDyadChain.append(dyad);
+                    EchoTreeLogService.dyads[thisEmail] = newDyadChain;
+            except KeyError:
+                # no diad chain needs repairing.
+                pass;
+                
+            self.write_message("showMsg:Back here it looks as if player '%s' is trying to play with another player of the same name. " % thisEmail +\
+                               "Trying to recover. Please go to the starting URL. So sorry.");
+            return; 
 
         with EchoTreeLogService.dyadLock:
             try:
                 thisPlayersDyads = EchoTreeLogService.dyads[thisEmail];
                 for dyad in thisPlayersDyads:
-                    if (thisEmail == dyad.player1ID() and thatEmail == dyad.player2ID()) or \
-                       (thisEmail == dyad.player2ID() and thatEmail == dyad.player1ID()):
+                    dyadDisabledID = dyad.disabledID();
+                    dyadPartnerID  = dyad.partnerID();
+                    if (thisEmail == dyadDisabledID and thatEmail == dyadPartnerID) or \
+                       (thisEmail == dyadPartnerID and thatEmail == dyadDisabledID):
                         # Found waiting dyad:
                         # The thisHandler was set when dyad was created. Now 
                         # set that of the partner:
@@ -481,19 +509,18 @@ class EchoTreeLogService(WebSocketHandler):
                         EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));
                         self.write_message('dyadComplete:');
                         # Notify the already waiting player:
-                        dyad.getThisHandler.write_message("dyadComplete:");
+                        dyad.getThisHandler().write_message("dyadComplete:");
                         return
                     
                 # Dyad chain for the player who is checking in was found,
                 # but none of those dyads represented a game of this player with 
                 # that other player. Create a new open dyad and link it to this
                 # player's existing chain of dyads:
-                if role == 'disabledRole':
-                    newDyad = ExperimentDyad(self, role, thisEmail, thatEmail);
-                elif role == 'partnerRole':
-                    newDyad = ExperimentDyad(self, role, thatEmail, thisEmail);
+                newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
-                EchoTreeLogService.dyads[thisEmail].append(newDyad); 
+                # Register this new dyad under both names so that we can find it:
+                EchoTreeLogService.dyads[thisEmail].append(newDyad);
+                EchoTreeLogService.dyads[thatEmail].append(newDyad);
                 self.write_message("waitForPlayer:" + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
@@ -501,15 +528,43 @@ class EchoTreeLogService(WebSocketHandler):
                 # The other player has not logged in yet. Create
                 # a new dyad with this handler as the first argument,
                 # and the player ids as the rest:
-                if role == 'disabledRole':
-                    newDyad = ExperimentDyad(self, role, thisEmail, thatEmail);
-                elif role == 'partnerRole':
-                    newDyad = ExperimentDyad(self, role, thatEmail, thisEmail);                    
+                newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
                 EchoTreeLogService.dyads[thisEmail] = [newDyad];
+                EchoTreeLogService.dyads[thatEmail] = [newDyad];
                 self.write_message("waitForPlayer:" + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
+
+    @staticmethod
+    def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
+        with EchoTreeLogService.dyadLock:
+            try:
+                newPlayersDyads = EchoTreeLogService.dyads[contactingPlayerEmail];
+            except KeyError:
+                # Totally new person:
+                return EchoTreeLogService.randomRole();
+            for dyad in newPlayersDyads:
+                if (not dyad.isDyadLoggedIn() and ((dyad.disabledID() == contactingPlayerEmail) or
+                                       (dyad.partnerID()) == contactingPlayerEmail)):
+                    # If an open dyad already exists for him, then he 
+                    # pushed the browser back button, or reloaded. Delete that
+                    # open dyad, and give him a new one:
+                    del EchoTreeLogService.dyads[contactingPlayerEmail];
+                    return EchoTreeLogService.randomRole();
+                if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
+                    # Dyad was opened for a friend of the new player. So the
+                    # new player must get the opposite role:
+                    return Role.PARTNER;
+                elif (not dyad.isDyadLoggedIn() and (dyad.partnerID() == friendEmail)):
+                    return Role.DISABLED;
+                    
+    @staticmethod
+    def randomRole():
+        if random.randint(1,2) == 1:
+            return Role.DISABLED;
+        else:
+            return Role.PARTNER;
 
     @staticmethod
     def log(theStr, addTimestamp=True):
@@ -565,8 +620,12 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
         #Should probably just load that once, but this request is not frequent.
         scriptDir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                   "../browser_scripts/");
+        isGetAssignment = False;                                  
         if (request.path == "/"):
             scriptPath = os.path.join(scriptDir, "index.html");
+        elif (os.path.split(request.path)[1] == 'getAssignment'):
+            # Requested 'file' ended in getAssignment, so it's the initial form submission:
+            isGetAssignment = True;
         else:
             scriptPath = os.path.join(scriptDir, request.path[1:]);
 
@@ -579,17 +638,49 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
             mimeType = JS_MIME;
             #self.set_header("Content-Type", "application/x-javascript; charset=UTF-8");
 
+        if (isGetAssignment):
+            requestURL = request.full_url();
+            urlFragTuple = urlparse.urlsplit(requestURL);
+            urlRoot = urlFragTuple.scheme + "://" + urlFragTuple.netloc + '/';
+            # Query part of URL is like this: 'ownEmail=me@google&otherEmail=you@google'
+            urlQuery = urlFragTuple.query;
+            # Get this type of struct: dict: {'ownEmail': ['me@google.com'], 'otherEmail': ['you@google.com']}
+            emailInfoDict = urlparse.parse_qs(urlQuery);
+            try:
+                roleToAssign = EchoTreeLogService.decideNewPlayersRole(emailInfoDict['ownEmail'][0], emailInfoDict['otherEmail'][0]);
+            except KeyError:
+                EchoTreeLogService.log("Initial contact does not provide emails. Dict is: %s" % str(emailInfoDict));
+                return;
+            if roleToAssign == Role.DISABLED:
+                assignedScriptURL = urlRoot + 'disabled.html';
+            else:
+                assignedScriptURL = urlRoot + 'partner.html';
+            
+            contentLen = len(assignedScriptURL);
+            lastModTime = time.time();
+        else:
+            if not os.path.exists(scriptPath):
+                EchoTreeLogService.log("Non-existing script path requested by some browser: %s" + str(scriptPath));
+                return;
+            contentLen  = os.path.getsize(scriptPath);
+            lastModTime = time.ctime(os.path.getmtime(scriptPath));
+        
 
         # Create the response and the HTML page string:
         reply =  "HTTP/1.1 200 OK\r\n" +\
                  "Content-Type, " + mimeType + "\r\n" +\
-                 "Content-Length:%s\r\n" % os.path.getsize(scriptPath) +\
-                 "Last-Modified:%s\r\n" % time.ctime(os.path.getmtime(scriptPath)) +\
+                 "Content-Length:%s\r\n" % contentLen +\
+                 "Last-Modified:%s\r\n" % lastModTime +\
                  "\r\n";
-        # Add the HTML page to the header:
-        with open(scriptPath) as fileFD:
-            for line in fileFD:
-                reply += line;
+
+        if (isGetAssignment):
+            # Add the URL of the page the assignment-requesting user is to load:
+            reply += assignedScriptURL;
+        else:
+            # Add the HTML page to the header:
+            with open(scriptPath) as fileFD:
+                for line in fileFD:
+                    reply += line;
         request.write(reply);
         #self.set_header("Content-Type", mimeType);
         request.finish();
@@ -706,7 +797,7 @@ if __name__ == '__main__':
         EchoTreeLogService.logToConsole = True;
 
     # Service that coordinates traffice among all active participants:                                   
-    EchoTreeLogService.log("Starting EchoTree experiment server at port %s: . Interacts with participants." % "/echo_tree_experiment");
+    EchoTreeLogService.log("Starting EchoTree experiment server at port %s: . Interacts with participants." % (str(ECHO_TREE_EXPERIMENT_SERVICE_PORT) + ":/echo_tree_experiment"));
     application = tornado.web.Application([(r"/echo_tree_experiment", EchoTreeLogService),                                           
                                            ]);
     # Create the service that serves out the Web pages and JS:

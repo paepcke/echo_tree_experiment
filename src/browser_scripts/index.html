@@ -4,16 +4,17 @@
   <head>
 
     <link rel="stylesheet" href="partner.css" type="text/css" />
-    <meta charset="UTF-8">
+    <meta charset="UTF-8">n
+    <script type="text/javascript" src="getAssignment.js"></script>
 
   </head>
   <body>
     Welcome to the EchoTree experiment. Please enter your name and that of your partner:
     <div class="application" align="center">
-      Your name:<input class="twoLines" type="text" name="playerName1" id="playerName1"/><br>
-      Partner's name:<input class="twoLines" type="text" name="playerName2" id="playerName2"/>
+      Your email address:<input class="twoLines" type="text" name="playerName1" id="playerName1"/><br>
+      Partner's email address:<input class="twoLines" type="text" name="playerName2" id="playerName2"/>
     </div>
-    <a href="disabled.html">'Disabled' Player</a><br>
-    <a href="partner.html">'Conversation Partner' Player</a>
+    <input type=button onclick=getAssignment() value="Next" />
+
   </body>
 </html>

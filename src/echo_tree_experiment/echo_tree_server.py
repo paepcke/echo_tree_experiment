@@ -17,6 +17,7 @@ import socket;
 import argparse;
 import datetime;
 import threading;
+import json;
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -25,19 +26,18 @@ from tornado.websocket import WebSocketHandler;
 from tornado.httpserver import HTTPServer;
 
 from echo_tree import WordExplorer;
+from echo_tree_experiment.echo_tree_experiment_server import EchoTreeLogService
 
 HOST = socket.getfqdn();
-ECHO_TREE_SCRIPT_SERVER_PORT = 5000;
-ECHO_TREE_GET_PORT = 5001;
-ECHO_TREE_NEW_ROOT_PORT = 5002;
+ECHO_TREE_GET_PORT = 5004;
+ECHO_TREE_NEW_ROOT_PORT = 5005;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
 scriptDir = os.path.realpath(os.path.dirname(__file__)); 
 DBPATH_DMOZ_RECREATION = os.path.join(scriptDir, "Resources/dmozRecreation.db");
-DBPATH_DMOZ_GOOGLE = os.path.join(scriptDir, "Resources/google.db");
+DBPATH_GOOGLE = os.path.join(scriptDir, "Resources/google.db");
 
-SCRIPT_REQUEST_URI_PATH = r"/request_echo_tree_script";
 NEW_TREE_SUBMISSION_URI_PATH = r"/submit_new_echo_tree";
 ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 
@@ -45,11 +45,43 @@ ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 # Fixed script intended to subscribe to the EchoTree event server: 
 TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
 
-# -----------------------------------------  Event subclass that adds event flavors --------------------
+# -----------------------------------------  Class TreeContainer --------------------
 
-class FlavoredEvent(threading.Event):
+class TreeContainer(object):
+    
+    # Paths to all underlying ngram DBs. Key is tree type name,
+    # like 'google', or 'dmozRecreation':
+    ngramPaths = {};
+    
+    def __init__(self, treeTypeName):
+        self.treeTypeName = treeTypeName;
+        self.currentTree = None;
+        self.currentRootWord = None;
+        self.treeLock = Lock();
+        self.theSubscribers = [];
+
+    def currentTree(self):
+        return self.currentTree;
+        
+    def setCurrentTree(self, newTree):
+        with self.treeLock:
+            self.currentTree = newTree;
+
+    def addSubscriber(self, newSubscriberID):
+        self.theSubscribers.append(newSubscriberID);
+
+    def subscribers(self):
+        return self.theSubscribers;
+
+    @staticmethod
+    def addTreeType(typeName, ngramPath):
+        TreeContainer[typeName] = ngramPath;
+
+# -----------------------------------------  Event 'subclass' that adds event flavors --------------------
+
+class FlavoredEvent():
     '''
-    Subclass of Threading.Event, which allows events of multiple
+    Semantically a subclass of Threading.Event, which allows events of multiple
     types controlled by a single event flag. Each set() is a
     setting of the flag for one flavor. The wait() method is
     not overridden, so the setting of any flavor will wake a
@@ -61,6 +93,7 @@ class FlavoredEvent(threading.Event):
     
     def __init__(self):
         super(FlavoredEvent, self).__init__();
+        self.eventFlag = Event();
         self.flavorsLock = Lock();
         self.flavors = {}
         
@@ -72,7 +105,7 @@ class FlavoredEvent(threading.Event):
         '''
         with self.flavorsLock:
             self.flavors[flavor] = True;
-        super(FlavoredEvent, self).set();
+        self.eventFlag.set();
         
     def clear(self, flavor):
         '''
@@ -82,7 +115,7 @@ class FlavoredEvent(threading.Event):
         '''
         with self.flavorsLock:
             self.flavors[flavor] = False;
-        super(FlavoredEvent, self).clear();
+        self.eventFlag.clear();
 
     def hotFlavors(self):
         '''
@@ -106,8 +139,19 @@ class EchoTreeService(WebSocketHandler):
     connection.
     '''
     
-    # Class-level list of handler instances: 
     activeHandlers = [];
+    
+    # Dict mapping tree types to the tree container of that type.
+    # Each tree container holds the current tree that is based
+    # on one particular ngram db.  
+    treeContainers = {};
+    
+    # Class-level dict of handler instances that are 
+    # related by interest in their trees. Keys are experiment
+    # participant IDs. Values are arrays of handlers that are
+    # to be notified whenever the participant indicated in 
+    # the key generates a new tree by submitting a new root:
+    subscribingHandlers = {};
     # Lock to make access to activeHanlders data struct thread safe:
     activeHandlersChangeLock = Lock();
     
@@ -168,23 +212,40 @@ class EchoTreeService(WebSocketHandler):
         Called by WebSocket/tornado when a client connects. Method must
         be named 'open'
         '''
-        with EchoTreeService.currentEchoTreeLock:
-            # Deliver the current tree to the subscribing browser:
-            try:
-                self.write_message(EchoTreeService.currentEchoTree);
-            except Exception as e:
-                EchoTreeService.log("Error during send of current EchoTree to %s (%s) during initial subscription: %s" % (self.request.host, self.request.remote_ip, `e`));
+        pass
+#        with EchoTreeService.currentEchoTreeLock:
+#            # Deliver the current tree to the subscribing browser:
+#            try:
+#                self.write_message(EchoTreeService.currentEchoTree); #***********
+#            except Exception as e:
+#                EchoTreeService.log("Error during send of current EchoTree to %s (%s) during initial subscription: %s" % (self.request.host, self.request.remote_ip, `e`));
         
     
     def on_message(self, message):
         '''
-        Connected browser requests a new word:
+        Connected browser submits a request. Possible requests are:
+           - push a new root word. Message will be a 
+             JSON structure that decodes into dict like this: 
+             {'command':'newRootWord', 'submitter':<submitterIDStr>, 'word':<wordStr>, 'treeType':<treeTypeNameStr} 
         @param message: message arriving from the browser
         @type message: string
         '''
-        newRootWord = message.encode('utf-8');
-        RootWordSubmissionService.triggerTreeComputationAndDistrib(newRootWord);
-        EchoTreeService.log("New root word from connected browser: '%s'." % newRootWord);
+        encodedMsg = message.encode('utf-8');
+        msgDict = json.loads(encodedMsg);
+        try:
+            cmd = msgDict['command'];
+            submitter = msgDict['submitter'];
+            newRootWord = msgDict['word'];
+            treeType = msgDict['treeType'];
+        except KeyError:
+            EchoTreeLogService.log("Ill-formed root word submission message from browser: " + encodedMsg);
+        
+        # 
+        
+        
+        wordAndSubscriberArr = json.loads(encodedMsg);
+        RootWordSubmissionService.triggerTreeComputationAndDistrib(wordAndSubscriberArr);
+        EchoTreeService.log("New root word and subscribers from connected browser: '%s'." % str(wordAndSubscriberArr));
     
     def on_close(self):
         '''
@@ -224,12 +285,17 @@ class EchoTreeService(WebSocketHandler):
         for all instances of EchoTreeService.  
         '''
         with EchoTreeService.activeHandlersChangeLock:
-            for handler in EchoTreeService.activeHandlers:
+            for handler in EchoTreeService.activeHandlers: #************
                 handler.newEchoTreeEvent.set();
+
+    @staticmethod
+    def addNewTreeType(typeName, ngramDBPath):
+        EchoTreeService.treeContainers[typeName] = TreeContainer(typeName, ngramDBPath);
     
     class NewEchoTreeWaitThread(Thread):
         '''
-        Thread that waits for a new EchoTree to be submitted.
+        Thread that waits for a new EchoTree to have been created.
+        It then sends that tree 
         '''
         
         def __init__(self, handlerObj):
@@ -276,18 +342,24 @@ class RootWordSubmissionService(HTTPServer):
         a JSON word tree. Stores that new tree in EchoTreeService.currentEchoTree.
         Then sets the newWordEvent so that everyone waiting for that event
         gets called.
-        @param request: incoming new EchoTree 
+        @param request: incoming new EchoTree root word. Format: <senderID> <newWord> <treeType>.
+                        The <treeType> identifies the underlying ngram collection to use.
+                        The <treeType> is a key to the EchoTreeLogService.treeTypes dict.
         @type request: HTTPRequest.HTTPRequest
         '''
         
-        EchoTreeService.log("New root via HTTP; word '%s' from %s (%s)..." % (request.body, request.host, request.remote_ip));    
-        RootWordSubmissionService.triggerTreeComputationAndDistrib(request.body);
+        EchoTreeService.log("New root via HTTP; word '%s' from %s (%s)..." % (request.body, request.host, request.remote_ip));
+        senderAndWordArr = request.body.split();
+        if (len(senderAndWordArr) != 3):
+            EchoTreeService.log("Bad format in 'new root word' message from browser: " % request.body);
+            return;
+        RootWordSubmissionService.triggerTreeComputationAndDistrib(senderAndWordArr[0], senderAndWordArr[1], senderAndWordArr[2]);
 
     @staticmethod
-    def triggerTreeComputationAndDistrib(newRootWord):
+    def triggerTreeComputationAndDistrib(senderID, newRootWord, treeType):
         if newRootWord == RootWordSubmissionService.TreeComputer.rootWord:
             return;
-        RootWordSubmissionService.TreeComputer.rootWord = newRootWord;
+        RootWordSubmissionService.TreeComputer.rootWord = newRootWord; #***************8
         RootWordSubmissionService.TreeComputer.newWordEvent.set();
     
     def on_close(self):
@@ -295,6 +367,11 @@ class RootWordSubmissionService(HTTPServer):
     
     
     class TreeComputer(Thread):
+        '''
+        Waits for newWordEvent. Creates a new EchoTree from the root word that
+        it RootWordSubmissionService.TreeComputer. Calls notifyInterestedParties
+        to distribute the new tree to relevant connected browsers.
+        '''
         
         rootWord = None;
         newWordEvent = Event();
@@ -450,14 +527,14 @@ if __name__ == '__main__':
     rootWordAcceptor = SocketServerThreadStarter('RootWordSubmissionService', ECHO_TREE_NEW_ROOT_PORT); 
     rootWordAcceptor.start();
     
-    # Create the service that serves out a small JS script that listens to the new-tree events:
-    EchoTreeService.log('Starting EchoTree script server at port %d' % ECHO_TREE_SCRIPT_SERVER_PORT);
-    scriptServer = SocketServerThreadStarter('EchoTreeScriptRequestHandler', ECHO_TREE_SCRIPT_SERVER_PORT); 
-    scriptServer.start();
+#    EchoTreeService.log("Starting TreeComputer thread: computes new tree from Web-submitted words, using echo_tree.");
+#    treeComputerThread = RootWordSubmissionService.TreeComputer(); 
+#    treeComputerThread.start();    
     
-    EchoTreeService.log("Starting TreeComputer thread: computes new tree from Web-submitted words, using echo_tree.");
-    treeComputerThread = RootWordSubmissionService.TreeComputer(); 
-    treeComputerThread.start();    
+    # Create the different types of EchoTrees, each based on a different
+    # underlying ngram collection:
+    EchoTreeService.addNewTreeType("dmozRecreation", DBPATH_DMOZ_RECREATION);
+    EchoTreeService.addNewTreeType("google", DBPATH_GOOGLE);
     
     EchoTreeService.log("Starting EchoTree server at port %s: pushes new word trees to all connecting clients." % "/subscribe_to_echo_trees");
     application = tornado.web.Application([(r"/subscribe_to_echo_trees", EchoTreeService),
@@ -478,8 +555,7 @@ if __name__ == '__main__':
         if ioLoop.running():
             ioLoop.stop();
         rootWordAcceptor.stop();
-        scriptServer.stop();
-        treeComputerThread.stop();
+#        treeComputerThread.stop();
         EchoTreeService.log("EchoTree servers stopped.");
         if EchoTreeService.logFD is not None:
             EchoTreeService.logFD.close();
