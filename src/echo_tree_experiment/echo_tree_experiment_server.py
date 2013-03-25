@@ -84,6 +84,14 @@ class Role:
 
 class ExperimentDyad(object):
     
+    
+    # Dict of dyads keyed by player. Values are ExperimentDyad
+    # instances in which the keyed player participated in. Each dyad instance
+    # is represented in two value lists, once in the value for each player.
+    # However, the instances are the same object in both
+    # cases:
+    allDyads = {};
+    
     def __init__(self, theInstantiatingHandler, instantiatorRole, disabledID, partnerID):
         '''
         Creates a new ExperimentDyad.
@@ -250,13 +258,6 @@ class EchoTreeLogService(WebSocketHandler):
     
     # Array of paragraphs to choose from:
     paragraphs = None;
-    
-    # Dict of dyads keyed by player. Values are ExperimentDyad
-    # instances in which the keyed player participated in. Each dyad instance
-    # is represented in two value lists, once in the value for each player.
-    # However, the instances are the same object in both
-    # cases:
-    dyads = {};
     
     # Class-level list of handler instances: 
     activeHandlers = [];
@@ -465,13 +466,13 @@ class EchoTreeLogService(WebSocketHandler):
             # dyad involves this player. If so, delete that dyad:
             try:
                 with EchoTreeLogService.dyadLock:
-                    defectivePlayersDyads = EchoTreeLogService.dyads[thisEmail];
+                    defectivePlayersDyads = ExperimentDyad.allDyads[thisEmail];
                     if defectivePlayersDyads is not None:
                         newDyadChain = [];
                         for dyad in defectivePlayersDyads:
                             if dyad.isDyadLoggedIn():
                                 newDyadChain.append(dyad);
-                        EchoTreeLogService.dyads[thisEmail] = newDyadChain;
+                        ExperimentDyad.allDyads[thisEmail] = newDyadChain;
             except KeyError:
                 # no diad chain needs repairing.
                 pass;
@@ -482,7 +483,7 @@ class EchoTreeLogService(WebSocketHandler):
 
         with EchoTreeLogService.dyadLock:
             try:
-                thisPlayersDyads = EchoTreeLogService.dyads[thisEmail];
+                thisPlayersDyads = ExperimentDyad.allDyads[thisEmail];
                 for dyad in thisPlayersDyads:
                     dyadDisabledID = dyad.disabledID();
                     dyadPartnerID  = dyad.partnerID();
@@ -510,8 +511,8 @@ class EchoTreeLogService(WebSocketHandler):
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
                 # Register this new dyad under both names so that we can find it:
-                EchoTreeLogService.dyads[thisEmail].append(newDyad);
-                EchoTreeLogService.dyads[thatEmail].append(newDyad);
+                ExperimentDyad.allDyads[thisEmail].append(newDyad);
+                ExperimentDyad.allDyads[thatEmail].append(newDyad);
                 self.write_message("waitForPlayer:" + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
@@ -521,8 +522,8 @@ class EchoTreeLogService(WebSocketHandler):
                 # and the player ids as the rest:
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
-                EchoTreeLogService.dyads[thisEmail] = [newDyad];
-                EchoTreeLogService.dyads[thatEmail] = [newDyad];
+                ExperimentDyad.allDyads[thisEmail] = [newDyad];
+                ExperimentDyad.allDyads[thatEmail] = [newDyad];
                 self.write_message("waitForPlayer:" + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
@@ -552,7 +553,7 @@ class EchoTreeLogService(WebSocketHandler):
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
         with EchoTreeLogService.dyadLock:
             try:
-                newPlayersDyads = EchoTreeLogService.dyads[contactingPlayerEmail];
+                newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
             except KeyError:
                 # Totally new person:
                 return EchoTreeLogService.randomRole();
@@ -562,7 +563,7 @@ class EchoTreeLogService(WebSocketHandler):
                     # If an open dyad already exists for him, then he 
                     # pushed the browser back button, or reloaded. Delete that
                     # open dyad, and give him a new one:
-                    del EchoTreeLogService.dyads[contactingPlayerEmail];
+                    del ExperimentDyad.allDyads[contactingPlayerEmail];
                     return EchoTreeLogService.randomRole();
                 if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
                     # Dyad was opened for a friend of the new player. So the
@@ -589,8 +590,8 @@ class EchoTreeLogService(WebSocketHandler):
     def deletePlayer(playerID):
         with EchoTreeLogService.dyadLock:
             try:
-                playerDyadChainCopy = EchoTreeLogService.dyads[playerID].copy();
-                playerDyadChain = EchoTreeLogService.dyads[playerID];
+                playerDyadChainCopy = ExperimentDyad.allDyads[playerID].copy();
+                playerDyadChain = ExperimentDyad.allDyads[playerID];
             except KeyError:
                 # No dyads for this player exist: done.
                 return;
@@ -613,7 +614,7 @@ class EchoTreeLogService(WebSocketHandler):
             dyad.saveToCSV();
             
         with EchoTreeLogService.dyadLock:
-            for playerID, dyadChain in EchoTreeLogService.dyads.items():
+            for playerID, dyadChain in ExperimentDyad.allDyads.items():
                 try:
                     dyadChain.remove(dyad);
                 except ValueError:
@@ -873,7 +874,10 @@ if __name__ == '__main__':
         with open(gameOutputFilePath, 'w') as fd:
             fd.write("Disabled,Partner,Condition,");
             for i in range(NUM_OF_PARS_PER_SESSION):
-                fd.write('ParID_' + str(i) + ',StartTime_' + str(i) + ',EndTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i));
+                if i == 0:
+                    fd.write('ParID_' + str(i) + ',StartTime_' + str(i) + ',EndTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i));
+                else:
+                    fd.write(',ParID_' + str(i) + ',StartTime_' + str(i) + ',EndTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i));
             fd.write('\n');
         EchoTreeLogService.gameOutputFilePath = gameOutputFilePath; 
 
