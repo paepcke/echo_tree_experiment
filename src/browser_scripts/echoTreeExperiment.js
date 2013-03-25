@@ -28,10 +28,11 @@ if(typeof(WebSocket)!=="undefined") {
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    //var ws = new WebSocket("ws://mono.stanford.edu:5004/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://localhost:5004/subscribe_to_echo_trees");
+    //var ws = new WebSocket("ws://mono.stanford.edu:5005/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
 
     ws.onopen = function () {
+	// Can subscribe to a player's trees here.
     };
 
     ws.onerror = function () {
@@ -222,7 +223,13 @@ function sendNewRootWordFromTxtFld() {
 // root word. The remainder are all the player IDs to whom
 // the new tree should be pushed. In this case, both players:
 function sendNewRootWord(word) {
-    ws.send("newRoot:" + JSON.stringify([word,thisEmail,thatEmail]);
+    if (typeof thisEmail === 'undefined')
+	thisEmail = 'None';
+    newWordCmd   = {'command':'newRootWord',
+		    'submitter':thisEmail, 
+		    'word':word, 
+		    'treeType':'dmozRecreation'};
+    ws.send(JSON.stringify(newWordCmd));
 }
 
 
@@ -239,8 +246,14 @@ function handleEnterInWordFld(e) {
 function handleMouseDown(node, el) {
     //alert("Word: " + node.word);
     //alert("Button: " + this.event.which);
-    if (this.event.which == 1) // Left click
-	ws.send(node.word);
+    if (this.event.which == 1) {// Left click
+	//********* Fix the hard-coding
+	newRootWrdCmd = {'command':'newRootWord',
+			 'submitter':'me@google', 
+			 'word':node.word, 
+			 'treeType':'dmozRecreation'};
+	ws.send(JSON.stringify(newRootWrdCmd));
+    }
     else if (this.event.which == 2) // Middle click
 	toggle(node);
 }
@@ -373,5 +386,5 @@ function onRestart() {
 }
 
 // Get player IDs for myself and the other player:
-var thisEmail   = this.getCookie("echoTreeThisEmail");
+var thisEmail   = this.getCookie("echoTreeOwnEmail");
 var otherEmail  = this.getCookie("echoTreeOtherEmail");

@@ -26,8 +26,8 @@ function ExperimentManager () {
 	    wsExp.onopen = function () {
 	    };
 
-	    wsExp.onerror = function () {
-		this.logError('ERROR: ' + evt.data);
+	    wsExp.onerror = function (evt) {
+		alert('ERROR (evt.data): ' + evt.data);
 	    };
 
 	    wsExp.onmessage = function (event) {
