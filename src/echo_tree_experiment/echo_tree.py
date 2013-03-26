@@ -69,7 +69,7 @@ class WordFollower(object):
         # Necessary so that the ordering isn't alpha. This even
         # thought the followingCount is declared as int:
         try:
-            self.cursor.execute('SELECT follower,followingCount from EnronWords where word="%s" ORDER BY followingCount*1 desc;' % self.word);
+            self.cursor.execute('SELECT follower,followingCount from Ngrams where word="%s" ORDER BY followingCount*1 desc;' % self.word);
         except sqlite3.OperationalError as e:
             raise ValueError("SELECT statement failed for word '%s' in databse '%s': %s" % (self.word, self.db.dbPath, `e`));
             
@@ -196,7 +196,8 @@ class WordExplorer(object):
 if __name__ == "__main__":
     
     #dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
-    dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+    #dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
+    dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/dmozRecreation.db");
     
 #    db = WordDatabase(dbPath);
 #    with WordFollower(db, 'ant') as followers:
