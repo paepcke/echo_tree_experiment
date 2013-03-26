@@ -3,17 +3,92 @@
 <html>
   <head>
 
-    <link rel="stylesheet" href="partner.css" type="text/css" />
+    <link rel="stylesheet" href="index.css" type="text/css" />
     <meta charset="UTF-8">
+    <script type="text/javascript" src="getAssignment.js"></script>
 
   </head>
   <body>
-    Welcome to the EchoTree experiment. Please enter your name and that of your partner:
-    <div class="application" align="center">
-      Your name:<input class="twoLines" type="text" name="playerName1" id="playerName1"/><br>
-      Partner's name:<input class="twoLines" type="text" name="playerName2" id="playerName2"/>
+    <H1>Welcome to the EchoTree experiment</H1>
+
+    The goal of this experiment/game is to determine which parameter
+    settings are optimal for a new computer interface idea. The
+    experiment tests nothing at all about you. The interface under
+    test is to help people who interact with a motion and speech
+    disabled individual. While the speech impaired person slowly types
+    a sentence, one or more conversation partners can see on a Web
+    page both the typing, and a graph that 'guesses' different
+    conversational directions the typist might have in mind.
+    <p>
+    In this experiment you and one other person will interact via your
+    computer, and the telephone. One of you will pretend that you
+    cannot speak. The participant playing this 'disabled' role will
+    see a sentence or two on their screen. They will start typing the
+    sentence into a text field.
+    <p>
+    The other player, who will play the able bodied 'conversation
+    partner' role, will try to guess over the phone what the impaired
+    person is trying to say. When a guess is close, the disabled
+    player may click on a button that says <i>That's Close; will type
+    more.</i> The partner will see an indication of that button push
+    on their end, and the disabled player will continue typing.
+    <p>
+    Hearing a good partial guess, the disabled player may decide to
+    type information other than the precise sentence they were
+    given. The goal is for the disabled person to have to type <b>as
+    little as possible</b>. The exeriment system limits typing speed to
+    what a motion impaired person might be able to manage. The
+    computer will simply not accept faster typing. This effect will be
+    obvious, and you do not need to remember to slow down.
+    <p>
+    When the disabled person decides that the partner has guessed the
+    <b>essence</b> of the sentence, they press a button labeled <i>You
+    got it!</i>  and a new sentence will be presented to the disabled
+    person for another round. After 10 sentences, the players switch
+    roles. The experiment finishes after that second round. Of course,
+    either of you may stop and abort the experiment at any time if you
+    need to.
+    <p>
+    It is crucial that the player in the 'disabled' role does not
+    speak once they are presented with a sentence to type. Only the
+    partner voices their guesses over the phone. It's a one-way
+    conversation. We are testing how well this interaction would work
+    if the disabled player really could not speak.
+    <p>
+    You will play with a player of your choice.  You will each type in
+    your own email address below, plus your partner's email. For
+    example, if you are John, and your email is john@google.com, and
+    your game partner's email is doris@yahoo.com, you will type
+    john@google.com as your email address, and doris@yahoo.com as your
+    partner's address. Doris on the other hand, will type in
+    doris@yahoo.com in the <i>Your email address</i> field, and
+    john@google.com in the <i>Partner's email address field</i>. You
+    will both press your <i>Next</i> button once you typed in the
+    email addresses.
+    <p>
+    It is important that you use email addresses consistently: If John
+    fills his partner's email in as doris@yahoo.com, then Doris needs
+    to specify that very email as hers in the address field on her
+    end. Otherwise the computer won't be able to tell that you are
+    playing together, and nothing will work.
+    <p>
+    Your email will at most be used for me to contact you if something
+    goes wrong, or to say thank you. The address will not be shared,
+    sold, auctioned, or donated to the Mafia. The information's main
+    purpose is for the computer to match you up with your player.
+    <p>
+    The computer will tell you when you are both logged in, and can
+    begin. The first sentence will be a practice run. You can confer
+    with each other over the phone during that practice run to ensure
+    you are both clear.
+
+    Please enter your email address and that of your partner, and then
+    click the <i>Next</i> key:
+    <div class="application" align="right">
+      Your email address: <input class="twoLines" type="text" name="playerName1" id="playerName1"/><br>
+      Partner's email address: <input class="twoLines" type="text" name="playerName2" id="playerName2"/>
     </div>
-    <a href="disabled.html">'Disabled' Player</a><br>
-    <a href="partner.html">'Conversation Partner' Player</a>
+    <input type=button id=nextButton onclick=getAssignment() value="Next" />
+
   </body>
 </html>

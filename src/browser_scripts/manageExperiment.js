@@ -1,8 +1,8 @@
-var wsExp = undefined;
 
 function ExperimentManager () {
 
     var that = this;
+    var wsExp = undefined;
     var DONT_PROPAGATE = false;
     var DO_PROPAGATE = true;
     var NO_APPEND = false;
@@ -16,24 +16,24 @@ function ExperimentManager () {
     var currParID = -1;
 
     this.connect = function() {
-	var expManager = this;
+	myExpManager = this;
 	// Check for browser support:
 	if(typeof(WebSocket)!=="undefined") {
 
-	    wsExp = new WebSocket("ws://mono.stanford.edu:5004/echo_tree_experiment");
-	    //wsExp = new WebSocket("ws://localhost:5004/echo_tree_experiment");
+	    //this.wsExp = new WebSocket("ws://mono.stanford.edu:5004/echo_tree_experiment");
+	    wsExp = new WebSocket("ws://localhost:5004/echo_tree_experiment");
 
 	    wsExp.onopen = function () {
 	    };
 
-	    wsExp.onerror = function () {
-		this.logError('ERROR: ' + evt.data);
+	    wsExp.onerror = function (evt) {
+		alert('ERROR (evt.data): ' + evt.data);
 	    };
 
 	    wsExp.onmessage = function (event) {
 		if (event.data.length == 0)
 		    return;
-		expManager.execCmd(event.data);
+		myExpManager.execCmd(event.data);
 	    }
 
 	} else {
@@ -42,14 +42,19 @@ function ExperimentManager () {
 	}
     }
 
-    this.login = function() {
-	// Log into server:
-	//******that.wsExp.send("login:role=" + whoami + 
-	wsExp.send("login:role=" + "Andreas" + 
-		   " disabledID=" + "****disabled@foo.com" + 
-		   " parterID=" + "****partner@bar.com");
-    }
-
+    this.getCookie = function (c_name) {
+	var i,x,y,ARRcookies=document.cookie.split(";");
+	for (i=0;i<ARRcookies.length;i++)
+	{
+	    x=ARRcookies[i].substr(0,ARRcookies[i].indexOf("="));
+	    y=ARRcookies[i].substr(ARRcookies[i].indexOf("=")+1);
+	    x=x.replace(/^\s+|\s+$/g,"");
+	    if (x==c_name)
+	    {
+		return unescape(y);
+	    }
+	}
+    }   
 
     this.execCmd = function(cmdStr) {
 
@@ -62,6 +67,7 @@ function ExperimentManager () {
 	case "test":
 	    alert("Got test message");
 	    wsExp.send("test: " + whoami + " got it.");
+
 	    break;
 	case "showMsg":
 	    var msg = cmdArr.shift();
@@ -70,6 +76,24 @@ function ExperimentManager () {
 		return;
 	    }
 	    this.showMsg(msg);
+	    break;
+	case "sendLogin":
+	    alert("Got login prompt.");
+	    var disabledID;
+	    var partnerID;
+	    if (whoami == 'disabledRole') {
+		disabledID = this.getCookie("echoTreeOwnEmail");
+		partnerID  = this.getCookie("echoTreeOtherEmail");
+	    } else {
+		disabledID = this.getCookie("echoTreeOtherEmail");
+		partnerID  = this.getCookie("echoTreeOwnEmail");
+		// Partner's ticker tape is readonly:
+		document.getElementById('ticker').readOnly=true;
+	    }
+	    
+    	    wsExp.send("login:role=" + whoami + 
+    		       " disabledID=" + disabledID + 
+    		       " partnerID=" + partnerID);
 	    break;
 	case "waitForPlayer":
 	    var missingPlayersID = cmdArr.shift();
@@ -88,10 +112,22 @@ function ExperimentManager () {
 		this.logError("No word provided in addWord message.");
 		return;
 	    }
-	    if (wordToAdd.length === 1)
-		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
-	    else
-		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	    try {
+		// The partner ticker tape is readonly, except for
+		// chars transmitted from disabled player for echoing
+		// at the partner. Temporarily disable readonly:
+		if (whoami == 'partnerRole')
+		    document.getElementById('ticker').readOnly=false;
+		if (wordToAdd.length === 1)
+		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
+		else
+		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	    } catch (e) {
+	    } finally {
+		if (whoami == 'partnerRole') {
+		    document.getElementById('ticker').readOnly=true;
+		}
+	    }
 	    break;
 	case "newPar":
             // On disabled player newPar has form <parID>|<parStr>.
@@ -107,7 +143,7 @@ function ExperimentManager () {
 		this.showMsg("The next paragraph will loosely be about " + parIDAndParStr[0]);
 		return;
 	    }
-	    currParID = parIDAndParStr[0];
+	    this.currParID = parIDAndParStr[0];
 	    document.getElementById("taskText").value= parIDAndParStr[1];
 	    break;
 	case "goodGuessClicked":
@@ -172,12 +208,14 @@ function ExperimentManager () {
 	alert(msg);
     }
 
-    // Bind ticker tape's keyboard presses to ontickertyped:
-    document.getElementById("ticker").onkeyup = this.ontickertyped;
-    document.getElementById("partialDone").onclick=this.onGoodGuessClicked;
-    document.getElementById("allDone").onclick=this.onParCompleteClicked;
-
 } // end ExperimentManager
 
 expManager = new ExperimentManager();
+// Bind ticker tape's keyboard presses to ontickertyped:
+document.getElementById("ticker").onkeyup=expManager.ontickertyped;
+if (whoami === 'disabledRole') {
+    document.getElementById("partialDone").onclick=expManager.onGoodGuessClicked;
+    document.getElementById("allDone").onclick=expManager.onParCompleteClicked;
+}
+
 expManager.connect();

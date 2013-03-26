@@ -21,17 +21,18 @@ var vis = d3.select("#echotree").append('svg')
     .append('g')
     .attr("transform", "translate(" + m[3] + "," + m[0] + ")");
 
+
 // Check for browser support:
 if(typeof(WebSocket)!=="undefined") {
 
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    //var ws = new WebSocket("ws://duo:5001/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://mono.stanford.edu:5001/subscribe_to_echo_trees");
-    //var ws = new WebSocket("ws://localhost:5001/subscribe_to_echo_trees");
+    //var ws = new WebSocket("ws://mono.stanford.edu:5005/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
 
     ws.onopen = function () {
+	// Can subscribe to a player's trees here.
     };
 
     ws.onerror = function () {
@@ -90,6 +91,20 @@ if(typeof(WebSocket)!=="undefined") {
     // WebSockets not supported in this browser:
     document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
 }
+
+function getCookie(c_name) {
+    var i,x,y,ARRcookies=document.cookie.split(";");
+    for (i=0;i<ARRcookies.length;i++)
+    {
+	x=ARRcookies[i].substr(0,ARRcookies[i].indexOf("="));
+	y=ARRcookies[i].substr(ARRcookies[i].indexOf("=")+1);
+	x=x.replace(/^\s+|\s+$/g,"");
+	if (x==c_name)
+	{
+	    return unescape(y);
+	}
+    }
+}   
 
 function update(source) {
     
@@ -204,9 +219,17 @@ function sendNewRootWordFromTxtFld() {
 }
 
 // Given a word, tell browser to make that word into the 
-// new root:
+// new root. We pass an array whose first val is the new
+// root word. The remainder are all the player IDs to whom
+// the new tree should be pushed. In this case, both players:
 function sendNewRootWord(word) {
-    ws.send(word);
+    if (typeof thisEmail === 'undefined')
+	thisEmail = 'None';
+    newWordCmd   = {'command':'newRootWord',
+		    'submitter':thisEmail, 
+		    'word':word, 
+		    'treeType':'dmozRecreation'};
+    ws.send(JSON.stringify(newWordCmd));
 }
 
 
@@ -223,8 +246,14 @@ function handleEnterInWordFld(e) {
 function handleMouseDown(node, el) {
     //alert("Word: " + node.word);
     //alert("Button: " + this.event.which);
-    if (this.event.which == 1) // Left click
-	ws.send(node.word);
+    if (this.event.which == 1) {// Left click
+	//********* Fix the hard-coding
+	newRootWrdCmd = {'command':'newRootWord',
+			 'submitter':'me@google', 
+			 'word':node.word, 
+			 'treeType':'dmozRecreation'};
+	ws.send(JSON.stringify(newRootWrdCmd));
+    }
     else if (this.event.which == 2) // Middle click
 	toggle(node);
 }
@@ -355,3 +384,7 @@ function onIncorrect() {
 function onRestart() {
     alert("RESTART");
 }
+
+// Get player IDs for myself and the other player:
+var thisEmail   = this.getCookie("echoTreeOwnEmail");
+var otherEmail  = this.getCookie("echoTreeOtherEmail");
