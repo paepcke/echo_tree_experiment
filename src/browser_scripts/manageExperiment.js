@@ -87,6 +87,8 @@ function ExperimentManager () {
 	    } else {
 		disabledID = this.getCookie("echoTreeOtherEmail");
 		partnerID  = this.getCookie("echoTreeOwnEmail");
+		// Partner's ticker tape is readonly:
+		document.getElementById('ticker').readOnly=true;
 	    }
 	    
     	    wsExp.send("login:role=" + whoami + 
@@ -110,10 +112,22 @@ function ExperimentManager () {
 		this.logError("No word provided in addWord message.");
 		return;
 	    }
-	    if (wordToAdd.length === 1)
-		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
-	    else
-		addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	    try {
+		// The partner ticker tape is readonly, except for
+		// chars transmitted from disabled player for echoing
+		// at the partner. Temporarily disable readonly:
+		if (whoami == 'partnerRole')
+		    document.getElementById('ticker').readOnly=false;
+		if (wordToAdd.length === 1)
+		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
+		else
+		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	    } catch (e) {
+	    } finally {
+		if (whoami == 'partnerRole') {
+		    document.getElementById('ticker').readOnly=true;
+		}
+	    }
 	    break;
 	case "newPar":
             // On disabled player newPar has form <parID>|<parStr>.
@@ -129,7 +143,7 @@ function ExperimentManager () {
 		this.showMsg("The next paragraph will loosely be about " + parIDAndParStr[0]);
 		return;
 	    }
-	    currParID = parIDAndParStr[0];
+	    this.currParID = parIDAndParStr[0];
 	    document.getElementById("taskText").value= parIDAndParStr[1];
 	    break;
 	case "goodGuessClicked":
