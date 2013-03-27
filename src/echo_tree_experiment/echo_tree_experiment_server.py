@@ -669,7 +669,11 @@ class EchoTreeLogService(WebSocketHandler):
                 # Dyad was logged in. We saved it. Now just
                 # declare it open:
                 dyad.setDyadLoggedIn(state=False);
-                dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
+                try:
+                    dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
+                except AttributeError:
+                    # Recovering, so be tolerant of an uninitialized thatHander in the dyad:
+                    pass;
 
     @staticmethod
     def deleteDyad(dyad):
@@ -877,7 +881,7 @@ class SocketServerThreadStarter(Thread):
         super(SocketServerThreadStarter, self).run();
         try:
             if  self.socketServerClassName == 'EchoTreeExperimentPageRequestHandler':
-                EchoTreeLogService.log("Starting EchoTree page server %d: Returns Web pages and JavaScript for experiment." % self.port);
+                EchoTreeLogService.log("Starting EchoTree initial-page server at %d: Returns Web pages and JavaScript for experiment." % self.port);
                 http_server = EchoTreeExperimentPageRequestHandler(EchoTreeExperimentPageRequestHandler.handle_request);
                 http_server.listen(self.port);
                 self.ioLoop = IOLoop();
@@ -952,7 +956,7 @@ if __name__ == '__main__':
         EchoTreeLogService.gameOutputFilePath = gameOutputFilePath; 
 
     # Service that coordinates traffice among all active participants:                                   
-    EchoTreeLogService.log("Starting EchoTree experiment server at port %s: . Interacts with participants." % (str(ECHO_TREE_EXPERIMENT_SERVICE_PORT) + ":/echo_tree_experiment"));
+    EchoTreeLogService.log("Starting EchoTree experiment server at port %s: Interacts with participants." % (str(ECHO_TREE_EXPERIMENT_SERVICE_PORT) + ":/echo_tree_experiment"));
     application = tornado.web.Application([(r"/echo_tree_experiment", EchoTreeLogService),                                           
                                            ]);
     # Create the service that serves out the Web pages and JS:

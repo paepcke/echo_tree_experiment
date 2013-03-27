@@ -32,7 +32,11 @@ if(typeof(WebSocket)!=="undefined") {
     //var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
 
     ws.onopen = function () {
-	// Can subscribe to a player's trees here.
+	subscribeCmd   = {'command':'subscribe',
+			  'submitter':thisEmail, 
+			  'treeCreator':thatEmail,
+			  'treeType':'dmozRecreation'};
+	ws.send(JSON.stringify(subscribeCmd));
     };
 
     ws.onerror = function () {
