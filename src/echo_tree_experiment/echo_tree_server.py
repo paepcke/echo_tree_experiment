@@ -403,7 +403,7 @@ class EchoTreeService(WebSocketHandler):
         
         def run(self):
             while 1:
-                # Hang on new-EchoServer event:
+                # Hang on new-EchoTree event:
                 modifiedContainer = EchoTreeService.newEchoTreeQueue.get();
                 with EchoTreeService.currentEchoTreeLock:
                     # Deliver the new tree to the browser:

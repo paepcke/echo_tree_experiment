@@ -171,6 +171,9 @@ class ExperimentDyad(object):
         else:
             self.partnerHandler  = handler;
 
+    def setSavedToFile(self, newBool):
+        self.savedToFile = newBool;
+
     def getNewParScore(self):
         '''
         Returns a random paragraph for a dyad to work on.
@@ -189,7 +192,7 @@ class ExperimentDyad(object):
                 continue;
             except KeyError:
                 self.parsUsed[newParID] = True;
-                self.parScores.append(ParagraphScore(self.condition(), newParID, self.disabledID(), self.partnerID()));
+                self.parScores.append(ParagraphScore(self, self.condition(), newParID, self.disabledID(), self.partnerID()));
                 return newParID; 
 
     def saveToCSV(self, outfilePath=None):
@@ -215,11 +218,11 @@ class ExperimentDyad(object):
                          str(parScore.stopTime) + ',' +\
                          str(parScore.numGoodGuesses) + ',' +\
                          str(parScore.numLettersTyped));
-        self.savedToFile = True;
+        self.setSavedToFile(True);
         
 class ParagraphScore(object):
     
-    def __init__(self, condition, parID, disabledID, partnerID):
+    def __init__(self, dyadParent, condition, parID, disabledID, partnerID):
         '''
         @param parContent: Content of the paragraph being scored
         @type parContent: String
@@ -228,6 +231,7 @@ class ParagraphScore(object):
         self.disabledPlayer   = disabledID;
         self.partnerPlayer    = partnerID;
         self.condition        = condition;
+        self.dyadParent       = dyadParent;
         self.startTime        = 0L;
         self.stopTime         = 0L;
         self.numLettersTyped  = 0;
@@ -241,15 +245,19 @@ class ParagraphScore(object):
     def addInsertedWord(self, word):
         self.insertedWords.append(word);
         self.numLettersTyped += 1;
+        self.dyadParent.setSavedToFile(False);
         
     def addGoodnessClick(self):
         self.numGoodGuesses += 1;
+        self.dyadParent.setSavedToFile(False);        
         
     def setStartTime(self):
         self.startTime = time.time();
+        self.dyadParent.setSavedToFile(False);        
 
     def setStopTime(self):
         self.stopTime = time.time();
+        self.dyadParent.setSavedToFile(False);        
 
 # -----------------------------------------  Top Level Service Provider Classes --------------------
 
@@ -278,9 +286,6 @@ class EchoTreeLogService(WebSocketHandler):
     # This path is computed and this class var is
     # initialized in main():
     gameOutputFilePath = None;    
-    
-    # Lock for changing the current EchoTree:
-#    currentEchoTreeLock = Lock();
     
     # Log FD for logging. If None, calls to log() are ignored.
     # Else log to this FD (allowed to be sys.stdout for console:
@@ -432,6 +437,8 @@ class EchoTreeLogService(WebSocketHandler):
         finally:
             EchoTreeLogService.log("Browser at %s (%s) now disconnected." % (self.request.host, self.request.remote_ip));
 
+    def sendMsgToBrowser(self, msg):
+        self.write_message('showMsg:' + msg);
 
     def processLogin(self, msgArr):
         '''
@@ -481,6 +488,13 @@ class EchoTreeLogService(WebSocketHandler):
             # Something wrong. To recover, check whether any open
             # dyad involves this player. If so, delete that dyad:
             try:
+                #**********
+                lockOpen = EchoTreeLogService.dyadLock.acquire(False);
+                if not lockOpen:
+                    raise ValueError("Would deadlock!");
+                else:
+                    EchoTreeLogService.dyadLock.release();
+                #**********
                 with EchoTreeLogService.dyadLock:
                     defectivePlayersDyads = ExperimentDyad.allDyads[thisEmail];
                     if defectivePlayersDyads is not None:
@@ -501,6 +515,14 @@ class EchoTreeLogService(WebSocketHandler):
         self.myPlayerID   = thisEmail;
         self.myPartnersID = thatEmail;
         self.myRole       = role;
+        #**********
+        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
+        if not lockOpen:
+            raise ValueError("Would deadlock!");
+        else:
+            EchoTreeLogService.dyadLock.release();
+        #**********
+        
         with EchoTreeLogService.dyadLock:
             try:
                 thisPlayersDyads = ExperimentDyad.allDyads[thisEmail];
@@ -582,6 +604,14 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
+        #**********
+        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
+        if not lockOpen:
+            raise ValueError("Would deadlock!");
+        else:
+            EchoTreeLogService.dyadLock.release();
+        #**********
+        
         with EchoTreeLogService.dyadLock:
             try:
                 newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
@@ -612,6 +642,14 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def deletePlayer(playerID):
+        #**********
+        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
+        if not lockOpen:
+            raise ValueError("Would deadlock!");
+        else:
+            EchoTreeLogService.dyadLock.release();
+        #**********
+        
         with EchoTreeLogService.dyadLock:
             try:
                 playerDyadChainCopy = copy.copy(ExperimentDyad.allDyads[playerID]);
@@ -631,12 +669,20 @@ class EchoTreeLogService(WebSocketHandler):
                 # Dyad was logged in. We saved it. Now just
                 # declare it open:
                 dyad.setDyadLoggedIn(state=False);
+                dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
 
     @staticmethod
     def deleteDyad(dyad):
         if dyad.isDyadLoggedIn() and not dyad.savedToFile:
             dyad.saveToCSV();
             
+        #**********
+        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
+        if not lockOpen:
+            raise ValueError("Would deadlock!");
+        else:
+            EchoTreeLogService.dyadLock.release();
+        #**********
         with EchoTreeLogService.dyadLock:
             for playerID, dyadChain in ExperimentDyad.allDyads.items():
                 try:

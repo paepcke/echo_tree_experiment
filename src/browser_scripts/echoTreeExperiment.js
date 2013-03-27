@@ -28,8 +28,8 @@ if(typeof(WebSocket)!=="undefined") {
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    //var ws = new WebSocket("ws://mono.stanford.edu:5005/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://mono.stanford.edu:5005/subscribe_to_echo_trees");
+    //var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
 
     ws.onopen = function () {
 	// Can subscribe to a player's trees here.
