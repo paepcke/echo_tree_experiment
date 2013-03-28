@@ -1,3 +1,9 @@
+var CONTACT_MACHINE = "ws://localhost";
+//var CONTACT_MACHINE = "ws://mono.stanford.edu";
+var EXPERIMENT_CONTACT_PORT = "5004";
+var ECHO_TREE_CONTACT_PORT  = "5005";
+
+
 // Dimentions and other core viz elements
 var m = [20, 120, 20, 120],
 w = 1000 - m[1] - m[3],
@@ -28,15 +34,17 @@ if(typeof(WebSocket)!=="undefined") {
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    var ws = new WebSocket("ws://mono.stanford.edu:5005/subscribe_to_echo_trees");
-    //var ws = new WebSocket("ws://localhost:5005/subscribe_to_echo_trees");
+    var ws = new WebSocket(CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
 
     ws.onopen = function () {
-	subscribeCmd   = {'command':'subscribe',
-			  'submitter':thisEmail, 
-			  'treeCreator':thatEmail,
-			  'treeType':'dmozRecreation'};
-	ws.send(JSON.stringify(subscribeCmd));
+	// Commented out because everyone is automatically 
+	// a subscriber of trees whose creation they trigger
+	// via submission of a new root word.
+	// subscribeCmd   = {'command':'subscribe',
+	// 		  'submitter':thisEmail, 
+	// 		  'treeCreator':thatEmail,
+	// 		  'treeType':'dmozRecreation'};
+	// ws.send(JSON.stringify(subscribeCmd));
     };
 
     ws.onerror = function () {
@@ -236,12 +244,21 @@ function sendNewRootWord(word) {
     ws.send(JSON.stringify(newWordCmd));
 }
 
+// Given a playerID, send a subscribe-to message to the
+// EchoTree server:
+function subscribeToTree(myID, treeCreatorsID, treeType) {
+    subscribeCmd   = {'command':'subscribe',
+		      'submitter':myID, 
+		      'treeCreator':treeCreatorsID,
+		      'treeType':treeType};
+    ws.send(JSON.stringify(subscribeCmd));
+}
 
 // Make ENTER key submit new root word when in text field:
 function handleEnterInWordFld(e) {
     if (!e) { var e = window.event; }
-    // Enter is pressed?
-    if (e.keyCode == 13) { sendNewRootWordFromTxtFld(); }
+    // ENTER key pressed?
+    if (e.keyCode == 13) { sendNewRootWordFromTxtFld(); }    
 }
 
 
@@ -302,7 +319,8 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	appendString = typeof appendString !== 'undefined' ? appendString : true;
 	prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
 
-	words = document.getElementById("ticker").value = content.split();
+	var tickerObj = document.getElementById("ticker");
+	words = tickerObj.value = content.split();
 
 	// Implement backspace
 	if (word === "0x08") {
@@ -315,11 +333,37 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 
 	content = t.arrToContent(words);
 	t.update();
-	document.getElementById("ticker").value = content;
+	tickerObj.value = content;
 	//el.value = content;
-	if (propagate)
+	if (propagate) {
+	    // Tell experiment manager about the word to 
+	    // have it update score:
 	    expManager.onwordadded(word);
+	    // Request a new EchoTree with a new word
+	    // as the root, if this 'word' is a word delimiter:
+	    if (word.match(/\W/) !== null) {
+		// Get word before the delimiter:
+		prevWord = wordTicker.getLatestWord();
+		if (prevWord !== undefined)
+		    sendNewRootWord(prevWord);
+	    }
+	}
     };
+
+    t.getLatestWord = function() {
+	// Get the last word that's currently in the ticker. 
+	// If no real word is there (maybe empty, or just delimiters),
+	// then return undefined.
+	tickerContent = document.getElementById("ticker").value.trim();
+	tickerArr = tickerContent.split(/\b\s+/);
+	if (tickerArr.length == 0)
+	    return undefined;
+	lastWord = tickerArr[tickerArr.length - 1];
+	if (lastWord.match(/\w+/g) !== null)
+	    return lastWord;
+	else
+	    return undefined;
+    }
 
     t.arrToContent = function(wordArray) {
 	var newContent = "";
@@ -362,6 +406,17 @@ function textMouseDown(node, el) {
 }
 
 // Add a word to the ticker.
+// Args:
+// propagate: optional, defaults to true. If set to false, insertion 
+//            of a word into the ticker will not be reported to the
+//            experiment manager. Used to avoid infinite recursion.
+//            Default: true;
+// appendString: if true, the given word is appended to the ticker widget. Otherwise
+//            we assume the ticker already contains the new information (because
+//            the user typed it), and we just have to propagate to the remote
+//            server, or otherwise do bookkeeping:
+// prependDelimiter: if true, the given word is prepended with a delimiter.
+
 function addToTicker(word, propagate, appendString, prependDelimiter) {
     propagate = typeof propagate !== 'undefined' ? propagate : true;
     appendString = typeof appendString !== 'undefined' ? appendString : true;

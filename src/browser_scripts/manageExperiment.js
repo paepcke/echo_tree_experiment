@@ -14,14 +14,16 @@ function ExperimentManager () {
     var ASCII_DEL = 126;
 
     var currParID = -1;
+    var myID    = undefined;
+    var otherID = undefined;
 
     this.connect = function() {
 	myExpManager = this;
 	// Check for browser support:
 	if(typeof(WebSocket)!=="undefined") {
 
-	    wsExp = new WebSocket("ws://mono.stanford.edu:5004/echo_tree_experiment");
-	    //wsExp = new WebSocket("ws://localhost:5004/echo_tree_experiment");
+	    // CONTACT_MACHINE and EXPERIMENT_CONTACT_PORT are set in echoTreeExperiment.js:
+	    wsExp = new WebSocket(CONTACT_MACHINE + ":" + EXPERIMENT_CONTACT_PORT + "/echo_tree_experiment");
 
 	    wsExp.onopen = function () {
 	    };
@@ -84,9 +86,13 @@ function ExperimentManager () {
 	    if (whoami == 'disabledRole') {
 		disabledID = this.getCookie("echoTreeOwnEmail");
 		partnerID  = this.getCookie("echoTreeOtherEmail");
+		myID       = disabledID;
+		otherID    = partnerID;
 	    } else {
 		disabledID = this.getCookie("echoTreeOtherEmail");
 		partnerID  = this.getCookie("echoTreeOwnEmail");
+		myID       = partnerID;
+		otherID    = disabledID;
 		// Partner's ticker tape is readonly:
 		document.getElementById('ticker').readOnly=true;
 	    }
@@ -94,6 +100,23 @@ function ExperimentManager () {
     	    wsExp.send("login:role=" + whoami + 
     		       " disabledID=" + disabledID + 
     		       " partnerID=" + partnerID);
+	    break;
+	case "subscribeToTree":
+	    // Server wants this browser to subscribe to someone else's tree.
+	    // Incoming msg's format: 
+	    //   "subscribeToTree:treeCreatorsID|treeType"
+	    // If we are not logged into the server, then we don't
+	    // know yet what our own ID is. Punt if so:
+	    if (myID === undefined) {
+		this.logError("Received subscribeToTree before my own ID was known: " + cmdStr);
+		return;
+	    }
+	    // Get the part after the colon:
+	    var treeCreatorAndTreeType = cmdArr.shift();
+	    treeCreatorTreeTypeArr = treeCreatorAndTreeType.split("|");
+	    treeCreator = treeCreatorTreeTypeArr[0];
+	    treeType    = treeCreatorTreeTypeArr[1];
+	    subscribeToTree(myID, treeCreator, treeType);
 	    break;
 	case "waitForPlayer":
 	    var missingPlayersID = cmdArr.shift();
@@ -164,6 +187,9 @@ function ExperimentManager () {
 	// is typed to *locally*. This method is not involved
 	// when info comes over from the other player.
 	
+	if (document.getElementById("ticker").readonly)
+	    return;
+
 	// Ascii printable range?
 	if (evt.which >= ASCII_SPACE && evt.which < ASCII_DEL) {
 	    charAsStr = String.fromCharCode(evt.which);
@@ -178,14 +204,10 @@ function ExperimentManager () {
 	    // Throw away any other non-printables (including arrow keys):
 	    return;
 	
-	if (whoami === "disabledRole")
-	    // If I'm the disabled player, send letter to partner.
-	    // The typing already place the letter in the text box,
-	    // so no appending needed.
-	    addToTicker(charAsStr, DO_PROPAGATE, NO_APPEND, DONT_PREPEND_DELIMITER);
-	else
-	    // Ticker tape is that of the partner: dont' send to disabled player:
-	    addToTicker(charAsStr, DONT_PROPAGATE, NO_APPEND, DONT_PREPEND_DELIMITER);
+	// If I'm the disabled player, send letter to partner.
+	// The typing already placed the letter in the text box,
+	// so no appending needed.
+	addToTicker(charAsStr, DO_PROPAGATE, NO_APPEND, DONT_PREPEND_DELIMITER);
     }
 
     this.onGoodGuessClicked = function () {
@@ -212,10 +234,16 @@ function ExperimentManager () {
 
 expManager = new ExperimentManager();
 // Bind ticker tape's keyboard presses to ontickertyped:
-document.getElementById("ticker").onkeyup=expManager.ontickertyped;
+tickerObj = document.getElementById("ticker");
+tickerObj.onkeyup=expManager.ontickertyped;
 if (whoami === 'disabledRole') {
     document.getElementById("partialDone").onclick=expManager.onGoodGuessClicked;
     document.getElementById("allDone").onclick=expManager.onParCompleteClicked;
+} else {
+    // Partner's ticker is readonly. This property will
+    // be briefly unset when chars from the disabled player
+    // arrive, and are to be displayed in the ticker:
+    tickerObj.readonly = true;
 }
 
 expManager.connect();

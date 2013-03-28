@@ -74,8 +74,8 @@ PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
 CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
 
 class Condition:
-    RECREATION_NGRAMS = 0;
-    GOOGLE_NGRAMS     = 1;
+    RECREATION_NGRAMS = 'recreationNgrams';
+    GOOGLE_NGRAMS     = 'googleNgrams';
 
 class Role:
     DISABLED = 'disabledRole';
@@ -382,8 +382,8 @@ class EchoTreeLogService(WebSocketHandler):
             word = msgArr[1];
             curParScore = self.myDyad.currentParScore();
             if curParScore is None:
-                EchoTreeLogService.log("Found a dyad's current score to be None during addWord. Word: '%s'. Disabled: %s. Partner: %s." %\
-                                       (word, self.myDyad.disabledID(), self.myDyad.partnerID()));
+                EchoTreeLogService.log("Found a dyad's current score to be None during addWord. Word: '%s'. Disabled: %s. Partner: %s. loggedIn: %s" %\
+                                       (word, self.myDyad.disabledID(), self.myDyad.partnerID(), str(self.myDyad.isDyadLoggedIn())));
                 return;
             # If word is longer than a single letter, it was not typed,
             # but clicked on in the EchoTree and copied down. Either way,
@@ -488,13 +488,6 @@ class EchoTreeLogService(WebSocketHandler):
             # Something wrong. To recover, check whether any open
             # dyad involves this player. If so, delete that dyad:
             try:
-                #**********
-                lockOpen = EchoTreeLogService.dyadLock.acquire(False);
-                if not lockOpen:
-                    raise ValueError("Would deadlock!");
-                else:
-                    EchoTreeLogService.dyadLock.release();
-                #**********
                 with EchoTreeLogService.dyadLock:
                     defectivePlayersDyads = ExperimentDyad.allDyads[thisEmail];
                     if defectivePlayersDyads is not None:
@@ -515,14 +508,6 @@ class EchoTreeLogService(WebSocketHandler):
         self.myPlayerID   = thisEmail;
         self.myPartnersID = thatEmail;
         self.myRole       = role;
-        #**********
-        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
-        if not lockOpen:
-            raise ValueError("Would deadlock!");
-        else:
-            EchoTreeLogService.dyadLock.release();
-        #**********
-        
         with EchoTreeLogService.dyadLock:
             try:
                 thisPlayersDyads = ExperimentDyad.allDyads[thisEmail];
@@ -539,11 +524,26 @@ class EchoTreeLogService(WebSocketHandler):
                         if dyad.isDyadLoggedIn():
                             EchoTreeLogService.log("Player logging into an already logged-in dyad with the same partner: " + str(msgArr));
                             return;
-                        dyad.setDyadLoggedIn();
+                        dyad.setDyadLoggedIn(state=True);
+                        # If this logging-in player is a partner, have
+                        # him subscribe to the disabled's tree:
+                        if self.myRole == Role.PARTNER: 
+                            msg = 'subscribeToTree:' + str(self.myPartnersID) + "|" + str(dyad.condition());
+                            self.write_message(msg);
+                        else:
+                            msg = 'subscribeToTree:' + str(self.myPlayerID) + "|"  + str(dyad.condition());
+                            dyad.getPartnerHandler().write_message(msg);
                         EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));
                         self.write_message('dyadComplete:');
                         # Notify the already waiting player:
-                        dyad.getThisHandler().write_message("dyadComplete:");
+                        thisHandler = dyad.getThisHandler();
+                        if (thisHandler is None):
+                            EchoTreeLogService.log("Found thisHandler to be None: dyad's disabledID: %s. dyad's partnerID: %s" % (str(dyadDisabledID), str(dyadPartnerID)));
+                            # Close the web socket; on_close() will do cleanup:
+                            self.write_message('showMsg:You and your partner are out of sync. Please: both refresh your Web page with the Reload button.');
+                            self.close();
+                            return;
+                        thisHandler.write_message("dyadComplete:");
                         self.startNewPar(dyad);
                         return
                     
@@ -565,6 +565,9 @@ class EchoTreeLogService(WebSocketHandler):
                 # and the player ids as the rest:
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
+                # Randomly select an exerimental condition:
+                initialCondition = EchoTreeLogService.decideNewPlayersCondition();
+                newDyad.setCondition(initialCondition);
                 ExperimentDyad.allDyads[thisEmail] = [newDyad];
                 ExperimentDyad.allDyads[thatEmail] = [newDyad];
                 self.write_message("waitForPlayer:" + thatEmail);
@@ -604,14 +607,6 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
-        #**********
-        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
-        if not lockOpen:
-            raise ValueError("Would deadlock!");
-        else:
-            EchoTreeLogService.dyadLock.release();
-        #**********
-        
         with EchoTreeLogService.dyadLock:
             try:
                 newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
@@ -619,20 +614,20 @@ class EchoTreeLogService(WebSocketHandler):
                 # Totally new person:
                 return EchoTreeLogService.randomRole();
             for dyad in newPlayersDyads:
-#  ***              if (not dyad.isDyadLoggedIn() and ((dyad.disabledID() == contactingPlayerEmail) or
-#                                       (dyad.partnerID()) == contactingPlayerEmail)):
-#                    # If an open dyad already exists for him, then he 
-#                    # pushed the browser back button, or reloaded. Delete that
-#                    # open dyad, and give him a new one:
-#                    del ExperimentDyad.allDyads[contactingPlayerEmail];
-#                    return EchoTreeLogService.randomRole();
                 if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
                     # Dyad was opened for a friend of the new player. So the
                     # new player must get the opposite role:
                     return Role.PARTNER;
                 elif (not dyad.isDyadLoggedIn() and (dyad.partnerID() == friendEmail)):
                     return Role.DISABLED;
-                    
+    
+    @staticmethod
+    def decideNewPlayersCondition():
+        if random.randint(0,1) == 0:
+            return Condition.RECREATION_NGRAMS;
+        else:
+            return Condition.GOOGLE_NGRAMS;
+                            
     @staticmethod
     def randomRole():
         if random.randint(1,2) == 1:
@@ -642,14 +637,6 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def deletePlayer(playerID):
-        #**********
-        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
-        if not lockOpen:
-            raise ValueError("Would deadlock!");
-        else:
-            EchoTreeLogService.dyadLock.release();
-        #**********
-        
         with EchoTreeLogService.dyadLock:
             try:
                 playerDyadChainCopy = copy.copy(ExperimentDyad.allDyads[playerID]);
@@ -680,13 +667,6 @@ class EchoTreeLogService(WebSocketHandler):
         if dyad.isDyadLoggedIn() and not dyad.savedToFile:
             dyad.saveToCSV();
             
-        #**********
-        lockOpen = EchoTreeLogService.dyadLock.acquire(False);
-        if not lockOpen:
-            raise ValueError("Would deadlock!");
-        else:
-            EchoTreeLogService.dyadLock.release();
-        #**********
         with EchoTreeLogService.dyadLock:
             for playerID, dyadChain in ExperimentDyad.allDyads.items():
                 try:
