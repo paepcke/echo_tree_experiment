@@ -1,8 +1,20 @@
-var CONTACT_MACHINE = "ws://localhost";
-//var CONTACT_MACHINE = "ws://mono.stanford.edu";
+// Ports for the experiment server and the
+// server of new EchoTrees:
 var EXPERIMENT_CONTACT_PORT = "5004";
 var ECHO_TREE_CONTACT_PORT  = "5005";
 
+// Get machine where this js script came from.
+// That's where we'll have to connect for our
+// two WebSockets (experiment server and 
+// EchoTrees (notice the parens at the end
+// of the function. Using a function to keep
+// the global namespace clean:
+
+var CONTACT_MACHINE = function () {
+    var parser  = document.createElement('a');
+    parser.href = window.location;
+    return parser.hostname;
+}();
 
 // Dimentions and other core viz elements
 var m = [20, 120, 20, 120],
@@ -34,7 +46,7 @@ if(typeof(WebSocket)!=="undefined") {
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
-    var ws = new WebSocket(CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
 
     ws.onopen = function () {
 	// Commented out because everyone is automatically 

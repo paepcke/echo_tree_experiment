@@ -23,7 +23,7 @@ function ExperimentManager () {
 	if(typeof(WebSocket)!=="undefined") {
 
 	    // CONTACT_MACHINE and EXPERIMENT_CONTACT_PORT are set in echoTreeExperiment.js:
-	    wsExp = new WebSocket(CONTACT_MACHINE + ":" + EXPERIMENT_CONTACT_PORT + "/echo_tree_experiment");
+	    wsExp = new WebSocket("ws://" + CONTACT_MACHINE + ":" + EXPERIMENT_CONTACT_PORT + "/echo_tree_experiment");
 
 	    wsExp.onopen = function () {
 	    };
