@@ -600,6 +600,7 @@ class EchoTreeLogService(WebSocketHandler):
         # a separator. Get both:
         topicPlusParArr = topicPlusPar.split('|');
         topicKeyword = topicPlusParArr[0];
+        # *******  The 1 can cause an IndexError. Deal with that.
         par = topicPlusParArr[1];
         dyad.getDisabledHandler().write_message('newPar:' + str(parID) + '|' + par);
         dyad.getPartnerHandler().write_message('newPar:' + topicKeyword);
