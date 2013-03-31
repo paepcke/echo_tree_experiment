@@ -654,9 +654,12 @@ class EchoTreeLogService(WebSocketHandler):
                 # Dyad is complete: save the dyad before deleting it:
                 if not dyad.savedToFile:
                     dyad.saveToCSV();
-                # Dyad was logged in. We saved it. Now just
-                # declare it open:
+                # Dyad was logged in. We saved it. Now:  
+                # declare this dyad open (for the benefit of the
+                # still-alive partner), but delete this copy of
+                # the dyad from the list of this player's dyads:
                 dyad.setDyadLoggedIn(state=False);
+                playerDyadChain.remove(dyad);
                 try:
                     dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
                 except AttributeError:
