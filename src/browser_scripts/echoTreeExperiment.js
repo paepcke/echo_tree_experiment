@@ -346,19 +346,19 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	content = t.arrToContent(words);
 	t.update();
 	tickerObj.value = content;
-	//el.value = content;
+
+	// Request a new EchoTree with a new word
+	// as the root, if this 'word' is a word delimiter:
+	if (word.match(/\W/) !== null) {
+	    // Get word before the delimiter:
+	    prevWord = wordTicker.getLatestWord();
+	    if (prevWord !== undefined)
+		sendNewRootWord(prevWord);
+	}
 	if (propagate) {
 	    // Tell experiment manager about the word to 
 	    // have it update score:
 	    expManager.onwordadded(word);
-	    // Request a new EchoTree with a new word
-	    // as the root, if this 'word' is a word delimiter:
-	    if (word.match(/\W/) !== null) {
-		// Get word before the delimiter:
-		prevWord = wordTicker.getLatestWord();
-		if (prevWord !== undefined)
-		    sendNewRootWord(prevWord);
-	    }
 	}
     };
 
