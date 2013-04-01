@@ -38,6 +38,11 @@ function ExperimentManager () {
 		myExpManager.execCmd(event.data);
 	    }
 
+	    wsExp.onclose = function(event) {
+		//**************
+		alert("Experiment server closed ws.");
+	    }
+
 	} else {
 	    // WebSockets not supported in this browser:
 	    document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
@@ -160,20 +165,35 @@ function ExperimentManager () {
 		this.logError("No parID or topicKeyword in newPar message.");
 		return;
 	    }
+	    ticker.clear();
+	    // Collapse the root of the current tree as a poor-man's 
+	    // clearing of the tree (I don't have time to figure out how
+	    // to clear the tree completely:
+	    collapse(root);
+
 	    parIDAndParStr = parInfo.split('|');
 	    if (parIDAndParStr.length == 1) {
 		// This player is a partner, arg is topic keyword:
 		this.showMsg("The next paragraph will loosely be about " + parIDAndParStr[0]);
 		return;
 	    }
+	    // This player plays the disabled party:
 	    this.currParID = parIDAndParStr[0];
+	    // Show the new text to be entered:
 	    document.getElementById("taskText").value= parIDAndParStr[1];
+	    this.showMsg("Please start on the new sentence in the top orange box.");
 	    break;
 	case "goodGuessClicked":
 	    this.deliverGoodGuessFeedback();
 	    break;
 	case "done":
 	    this.showMsg("All done. Thank you!");
+	    break;
+	case "pleaseClose":
+	    var closeReason = cmdArr.shift();
+	    this.wsExp.close();
+	    window.location = "http://" + CONTACT_MACHINE + ":" + EXPERIMENT_FRONT_PAGE_PORT;
+	    this.showMsg(closeReason);
 	    break;
 	}
     }

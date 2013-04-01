@@ -395,7 +395,7 @@ class EchoTreeLogService(WebSocketHandler):
             else:
                 self.myDyad.getThisHandler().write_message("addWord:" + word);
 
-        if (msgArr[0] == 'goodGuessClicked:'):
+        if (msgArr[0] == 'goodGuessClicked'):
             self.myDyad.currentParScore().addGoodnessClick();
             # Tell partner so feedback can be given:
             self.myDyad.getThatHandler().write_message("goodGuessClicked:");
@@ -403,7 +403,7 @@ class EchoTreeLogService(WebSocketHandler):
         # Is browser reporting that one paragraph is all done?
         # (Note this msg is also used when a disabled partner is
         # asking for its first paragraph. The arg is -1 in that case.
-        if (msgArr[0] == 'parDone:'):
+        if (msgArr[0] == 'parDone'):
             self.myDyad.currentParScore().setStopTime();
             newParID = self.startNewPar(self.myDyad);
             if newParID is None:
@@ -661,7 +661,8 @@ class EchoTreeLogService(WebSocketHandler):
                 dyad.setDyadLoggedIn(state=False);
                 playerDyadChain.remove(dyad);
                 try:
-                    dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
+                    #dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
+                    dyad.getThatHandler().sendMsgToBrowser("pleaseClose:the other player closed its connection to the server. Please sign in again."); 
                 except AttributeError:
                     # Recovering, so be tolerant of an uninitialized thatHander in the dyad:
                     pass;
@@ -911,12 +912,20 @@ if __name__ == '__main__':
 
         # Read the paragraphs the disabled players have to write
         # from a file, removing \n with spaces. The pars in the 
-        # file are separated by a newline:
+        # file are separated by a newline. Each line has format
+        #    <topicArea>|<text>\n\n
         with open(PARAGRAPHS_PATH, 'r') as fd:
             pars = fd.read().split('\n\n');
+            legalParEntries = [];
             for i,par in enumerate(pars):
-                pars[i] = pars[i].replace('\n', ' ')
-            EchoTreeLogService.paragraphs = pars; 
+                newPar = pars[i].replace('\n', ' ');
+                # Syntax check:
+                if len(newPar.split('|')) != 2:
+                    # Bad entry in paragraphs.txt:
+                    continue;
+                legalParEntries.append(newPar);
+                
+            EchoTreeLogService.paragraphs = legalParEntries; 
 
         # Find a fresh CSV file to output to:
         gameOutputFilePath = None;

@@ -90,5 +90,18 @@
     </div>
     <input type=button id=nextButton onclick=getAssignment() value="Next" />
 
+    <script type=text/javascript>
+      // Get player IDs for myself and the other player from browser cookie.
+      // If that cookie is set, we'll fill in the email lines:
+
+      var thisEmail   = this.getCookie("echoTreeOwnEmail");
+      var otherEmail  = this.getCookie("echoTreeOtherEmail");
+
+      if (typeof thisEmail !== "undefined")
+        document.getElementById("playerName1").value = thisEmail;
+      if (typeof otherEmail !== "undefined")
+        document.getElementById("playerName2").value = otherEmail;
+    </script>
+
   </body>
 </html>

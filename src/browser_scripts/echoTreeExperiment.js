@@ -1,5 +1,6 @@
 // Ports for the experiment server and the
 // server of new EchoTrees:
+var EXPERIMENT_FRONT_PAGE_PORT = "5003";
 var EXPERIMENT_CONTACT_PORT = "5004";
 var ECHO_TREE_CONTACT_PORT  = "5005";
 
@@ -282,7 +283,7 @@ function handleMouseDown(node, el) {
     if (this.event.which == 1) {// Left click
 	//********* Fix the hard-coding
 	newRootWrdCmd = {'command':'newRootWord',
-			 'submitter':'me@google', 
+			 'submitter':whoami, 
 			 'word':node.word, 
 			 'treeType':'dmozRecreation'};
 	ws.send(JSON.stringify(newRootWrdCmd));
@@ -315,6 +316,11 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var t = {}, words = [],
     content = "";
 
+    this.clear = function() {
+	// Clears the ticker tape:
+	document.getElementById("ticker").value = "";
+    }
+
     // addWord()
     // propagate: optional, defaults to true. If set to false, insertion 
     //            of a word into the ticker will not be reported to the
@@ -324,7 +330,7 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     //            we assume the ticker already contains the new information (because
     //            the user typed it), and we just have to propagate to the remote
     //            server, or otherwise do bookkeeping:
-    // prependDelimiter: if true, the given word is prepended with a delimiter.
+    // prependDelimiter: if true, the given word is prepended with a delimiter.    
 
     t.addWord = function(word, propagate, appendString, prependDelimiter) {
 	propagate = typeof propagate !== 'undefined' ? propagate : true;
@@ -413,8 +419,17 @@ function colorAllLabels(color) {
 // On mouse down, color label, add word to ticker.
 function textMouseDown(node, el) {
     colorLabel(el, fillColor);
-    if (whoami === "disabledRole")
-	addToTicker(node.word);
+    if (whoami === "disabledRole") {
+	addToTicker(node.word, DO_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	// Add a word delimiter to trigger tree creation and propagation:
+	addToTicker(" ", DO_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
+    } else {
+	// This is the partner, and they just clicked on a word in their 
+	// EchoTree. Partners don't get to enter words into the ticker, but
+	// they do get to request a new tree (which will only show up on their
+	// display. The disabled player's tree does not change.
+	sendNewRootWord(node.word);
+    }
 }
 
 // Add a word to the ticker.
