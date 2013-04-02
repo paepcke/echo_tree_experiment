@@ -127,6 +127,8 @@ class ExperimentDyad(object):
         # paragraphs in file PARAGRAPHS_PATH. That
         # file is internalized into EchoTreeLogServices.paragraphs:
         self.parsUsed  = {};
+        
+        self.creationTime = time.time();
 
     def currentParScore(self):
         if len(self.parScores) > 0:
@@ -198,7 +200,7 @@ class ExperimentDyad(object):
     def saveToCSV(self, outfilePath=None):
         '''
         Outputs one session's outcome to CSV with this schema:
-        Disabled,Partner,Condition, parID_i, StartTime_i, StopTime_i, GoodnessClicks_i, NumLettersTyped_i
+        Disabled,Partner,Condition, parID_i, StartTime_i, StopTime_i, GoodnessClicks_i, NumLettersTyped_i, changeLog_i
         @param outfile: path to csv file that is already prepared with a header.
         @type outfile: String
         '''
@@ -217,7 +219,8 @@ class ExperimentDyad(object):
                          str(parScore.startTime) + ',' +\
                          str(parScore.stopTime) + ',' +\
                          str(parScore.numGoodGuesses) + ',' +\
-                         str(parScore.numLettersTyped));
+                         str(parScore.numLettersTyped) + ',' +\
+                         str(parScore.changeLog));
         self.setSavedToFile(True);
         
 class ParagraphScore(object):
@@ -232,7 +235,7 @@ class ParagraphScore(object):
         self.partnerPlayer    = partnerID;
         self.condition        = condition;
         self.dyadParent       = dyadParent;
-        self.startTime        = 0L;
+        self.startTime        = time.time();
         self.stopTime         = 0L;
         self.numLettersTyped  = 0;
         
@@ -241,14 +244,18 @@ class ParagraphScore(object):
         self.typedWords = "";
         # Words inserted via clicking on a word in the tree:
         self.insertedWords = [];
+        # Log for every change:
+        self.changeLog = {'insertWord':[], 'goodnessClick':[]};
         
     def addInsertedWord(self, word):
         self.insertedWords.append(word);
         self.numLettersTyped += 1;
+        self.changeLog['insertWord'].append(time.time());
         self.dyadParent.setSavedToFile(False);
         
     def addGoodnessClick(self):
         self.numGoodGuesses += 1;
+        self.changeLog['goodnessClick'].append(time.time());
         self.dyadParent.setSavedToFile(False);        
         
     def setStartTime(self):
@@ -744,13 +751,12 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
             scriptPath = os.path.join(scriptDir, request.path[1:]);
 
         mimeType = HTML_MIME;
-        if (request.path == "/disabled.css" or request.path == "/partner.css"):
+        reqPath  = request.path;
+        if reqPath.endswith('.css'):
             mimeType = CSS_MIME;
-            #self.set_header("Content-Type", "text/css; charset=UTF-8");
 
-        elif (request.path == "/echoTreeExperiment.js" or request.path == "/manageExperiment.js"):
+        elif reqPath.endswith(".js") or isGetAssignment:
             mimeType = JS_MIME;
-            #self.set_header("Content-Type", "application/x-javascript; charset=UTF-8");
 
         if (isGetAssignment):
             requestURL = request.full_url();
@@ -782,7 +788,7 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
 
         # Create the response and the HTML page string:
         reply =  "HTTP/1.1 200 OK\r\n" +\
-                 "Content-Type, " + mimeType + "\r\n" +\
+                 "Content-Type:" + mimeType + "\r\n" +\
                  "Content-Length:%s\r\n" % contentLen +\
                  "Last-Modified:%s\r\n" % lastModTime +\
                  "\r\n";
@@ -942,9 +948,9 @@ if __name__ == '__main__':
             fd.write("Disabled,Partner,Condition,");
             for i in range(NUM_OF_PARS_PER_SESSION):
                 if i == 0:
-                    fd.write('ParID_' + str(i) + ',StartTime_' + str(i) + ',StopTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i));
+                    fd.write('ParID_' + str(i) + ',StartTime_' + str(i) + ',StopTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i) + ',ChangeLog_' + str(i));
                 else:
-                    fd.write(',ParID_' + str(i) + ',StartTime_' + str(i) + ',StopTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i));
+                    fd.write(',ParID_' + str(i) + ',StartTime_' + str(i) + ',StopTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i) + ',ChangeLog_' + str(i));
             fd.write('\n');
         EchoTreeLogService.gameOutputFilePath = gameOutputFilePath; 
 

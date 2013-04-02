@@ -5,3 +5,5 @@ cmake_install.cmake
 *.pyc
 dmozRecreation.db
 DmozRecreation/
+bin
+build

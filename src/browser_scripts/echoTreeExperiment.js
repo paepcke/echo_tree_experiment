@@ -316,11 +316,6 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
     var t = {}, words = [],
     content = "";
 
-    this.clear = function() {
-	// Clears the ticker tape:
-	document.getElementById("ticker").value = "";
-    }
-
     // addWord()
     // propagate: optional, defaults to true. If set to false, insertion 
     //            of a word into the ticker will not be reported to the
@@ -338,7 +333,7 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
 
 	var tickerObj = document.getElementById("ticker");
-	words = tickerObj.value = content.split();
+	words = tickerObj.value;
 
 	// Implement backspace
 	if (word === "0x08") {
@@ -399,6 +394,13 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 };
 
 var wordTicker = ticker("ticker", 500, ' ', 100);
+
+function clearTicker() {
+    // Clears the ticker tape:
+    document.getElementById("ticker").value = "";
+}
+
+
 
 // The color to use for selected labels.
 var fillColor = "blue";

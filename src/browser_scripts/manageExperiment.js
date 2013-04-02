@@ -165,11 +165,15 @@ function ExperimentManager () {
 		this.logError("No parID or topicKeyword in newPar message.");
 		return;
 	    }
-	    ticker.clear();
+	    clearTicker();
 	    // Collapse the root of the current tree as a poor-man's 
 	    // clearing of the tree (I don't have time to figure out how
-	    // to clear the tree completely:
-	    collapse(root);
+	    // to clear the tree completely. If no new-root-word message was
+	    // ever received, collapse is not yet defined, catch that condition:
+	    try {
+		collapse(root);
+	    } catch(err) {
+	    }
 
 	    parIDAndParStr = parInfo.split('|');
 	    if (parIDAndParStr.length == 1) {

@@ -94,8 +94,8 @@
       // Get player IDs for myself and the other player from browser cookie.
       // If that cookie is set, we'll fill in the email lines:
 
-      var thisEmail   = this.getCookie("echoTreeOwnEmail");
-      var otherEmail  = this.getCookie("echoTreeOtherEmail");
+      var thisEmail   = getCookie("echoTreeOwnEmail");
+      var otherEmail  = getCookie("echoTreeOtherEmail");
 
       if (typeof thisEmail !== "undefined")
         document.getElementById("playerName1").value = thisEmail;

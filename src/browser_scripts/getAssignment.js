@@ -10,6 +10,7 @@ function getAssignment() {
     var Url = "getAssignment?ownEmail=" + ownEmail + "&otherEmail=" + otherEmail;
 
     xmlHttp = new XMLHttpRequest(); 
+    xmlHttp.overrideMimeType('text/css');
     xmlHttp.onreadystatechange = handleAssignmentResponse;
     xmlHttp.open( "GET", Url, true );
     xmlHttp.send( null );
