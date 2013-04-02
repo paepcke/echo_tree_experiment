@@ -333,7 +333,8 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
 
 	var tickerObj = document.getElementById("ticker");
-	words = tickerObj.value;
+	words = tickerObj.value.split();
+	
 
 	// Implement backspace
 	if (word === "0x08") {
