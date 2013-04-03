@@ -43,6 +43,7 @@ from tornado.websocket import WebSocketHandler;
 from tornado.httpserver import HTTPServer;
 
 from echo_tree import WordExplorer;
+from echo_tree_server import TreeTypes;
 
 HOST = socket.getfqdn();
 
@@ -74,8 +75,8 @@ PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
 CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
 
 class Condition:
-    RECREATION_NGRAMS = 'recreationNgrams';
-    GOOGLE_NGRAMS     = 'googleNgrams';
+    RECREATION_NGRAMS = TreeTypes.RECREATION_NGRAMS;
+    GOOGLE_NGRAMS     = TreeTypes.GOOGLE_NGRAMS;
 
 class Role:
     DISABLED = 'disabledRole';
@@ -111,9 +112,11 @@ class ExperimentDyad(object):
         if instantiatorRole == Role.DISABLED:
             self.disabledHandler = theInstantiatingHandler;
             self.partnerHandler  = None;
+            self.theInstantiatingPlayerID = disabledID;
         else:
             self.partnerHandler  = theInstantiatingHandler;
             self.disabledHandler = None;
+            self.theInstantiatingPlayerID = partnerID;
         self.thatHandler  = None;
         self.theCondition    = None;
         
@@ -141,6 +144,9 @@ class ExperimentDyad(object):
     
     def partnerID(self):
         return self.thePartnerID;
+    
+    def instantiatingPlayerID(self):
+        return self.theInstantiatingPlayerID;
     
     def condition(self): 
         return self.theCondition;
@@ -542,15 +548,23 @@ class EchoTreeLogService(WebSocketHandler):
                             dyad.getPartnerHandler().write_message(msg);
                         EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));
                         self.write_message('dyadComplete:');
-                        # Notify the already waiting player:
+                        # Notify the already waiting player. When players hit the re-load button,
+                        # there can be a race condition, in which thisHandler is set to
+                        # None, even after we check for that condition. So instead of 
+                        # checking we use try/catch:
                         thisHandler = dyad.getThisHandler();
-                        if (thisHandler is None):
+                        try:
+                            thisHandler.write_message("dyadComplete:");
+                        except AttributeError:
                             EchoTreeLogService.log("Found thisHandler to be None: dyad's disabledID: %s. dyad's partnerID: %s" % (str(dyadDisabledID), str(dyadPartnerID)));
                             # Close the web socket; on_close() will do cleanup:
-                            self.write_message('showMsg:You and your partner are out of sync. Please: both refresh your Web page with the Reload button.');
-                            self.close();
+                            try:
+                                self.write_message('showMsg:You and your partner are out of sync. Please: both refresh your Web page with the Reload button.');
+                                self.close();
+                            except Exception as e:
+                                self.log("Handler found dead as we try to write 'dyadComplete', then exception when trying to notify *this* player: " + `e`);
                             return;
-                        thisHandler.write_message("dyadComplete:");
+                        
                         self.startNewPar(dyad);
                         return
                     
@@ -653,10 +667,16 @@ class EchoTreeLogService(WebSocketHandler):
                 # No dyads for this player exist: done.
                 return;
             for dyad in playerDyadChainCopy:
-                # if this dyad is open, no partner is involved
-                # yet; just delete the dyad:
+                # if this dyad is open, two possibilities:
+                #   1. this dying player created the dyad ==> delete the dyad
+                #   2. another, still healthy player created this dyad, put it
+                #      into this dying player's list, and is not waiting
+                #      for this dying player. ==> don't delete the dyad, b/c when this
+                #      dying player logs in after dying, it should find and connect
+                #      into that waiting dyad:
                 if not dyad.isDyadLoggedIn():
-                    playerDyadChain.remove(dyad);
+                    if dyad.instantiatingPlayerID() == playerID:
+                        playerDyadChain.remove(dyad);
                     continue;
                 # Dyad is complete: save the dyad before deleting it:
                 if not dyad.savedToFile:
@@ -669,7 +689,7 @@ class EchoTreeLogService(WebSocketHandler):
                 playerDyadChain.remove(dyad);
                 try:
                     #dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
-                    dyad.getThatHandler().sendMsgToBrowser("pleaseClose:the other player closed its connection to the server. Please sign in again."); 
+                    dyad.getThatHandler().write_message("pleaseClose:the other player closed its connection to the server. Please sign in again."); 
                 except AttributeError:
                     # Recovering, so be tolerant of an uninitialized thatHander in the dyad:
                     pass;

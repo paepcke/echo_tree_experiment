@@ -41,6 +41,10 @@ ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 # Fixed script intended to subscribe to the EchoTree event server: 
 TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
 
+class TreeTypes:
+    RECREATION_NGRAMS = 'dmozRecreation';
+    GOOGLE_NGRAMS     = 'googleNgrams';
+
 # -----------------------------------------  Class TreeContainer --------------------
 
 class TreeContainer(object):
@@ -88,9 +92,9 @@ class TreeContainer(object):
                 # Add the new handler, if it's not alreay in the array,
                 # in which case we get the ValueError:
                 try:
-                    subscribedToHandler.index(handler);
+                    subscribedToHandlers.index(handler);
                 except ValueError:
-                    subscribedToHandler.append(handler);
+                    subscribedToHandlers.append(handler);
             except KeyError:
                 # This subscriber is not subscribed to anything yet:
                 EchoTreeService.activeHandlers[newSubscriberID] = [handler];
@@ -273,8 +277,11 @@ class EchoTreeService(WebSocketHandler):
             except KeyError:
                 # the creator to whom the caller is trying to subscribe
                 # does not have a TreeContainer instance for any tree type.
-                EchoTreeService.log("Error: Request from %s subscribing to %s for tree type %s. But %s has no tree containers at all." % (str(submitter),str(treeCreator), str(treeType),str(treeCreator)));
-                return;
+                # Create one, with None for the current tree:
+                EchoTreeService.treeContainers[treeCreator] = [TreeContainer(treeCreator, treeType)];
+                treeContainersForTreeCreator = EchoTreeService.treeContainers[treeCreator];
+                #EchoTreeService.log("Error: Request from %s subscribing to %s for tree type %s. But %s has no tree containers at all." % (str(submitter),str(treeCreator), str(treeType),str(treeCreator)));
+                #return;
             # Found an array of tree containers for the specified treeCreator.
             # But does that creator deal with the specified tree type?
             foundIt = False;
@@ -283,7 +290,10 @@ class EchoTreeService(WebSocketHandler):
                     foundIt = True;
                     break;
             if not foundIt:
-                EchoTreeService.log("Request from %s subscribing to %s for tree type %s. But %s has no such tree type" % (str(submitter),str(treeType),str(treeCreator)));
+                EchoTreeService.log("Request from %s subscribing to %s for tree type %s. But %s has no such tree type" % (str(submitter),
+                                                                                                                          str(treeCreator),
+                                                                                                                          str(treeType),
+                                                                                                                          str(treeCreator)));
                 return;
             container.addSubscriber(submitter, self);
                 

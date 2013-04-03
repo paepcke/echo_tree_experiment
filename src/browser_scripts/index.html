@@ -92,10 +92,18 @@
 
     <script type=text/javascript>
       // Get player IDs for myself and the other player from browser cookie.
-      // If that cookie is set, we'll fill in the email lines:
+      // If that cookie is set, we'll fill in the email lines. If getAssignment()
+      // could not load, then the experiment server is down, and getCookie() is
+      // unavailable:
 
-      var thisEmail   = getCookie("echoTreeOwnEmail");
-      var otherEmail  = getCookie("echoTreeOtherEmail");
+      try {
+        var thisEmail   = getCookie("echoTreeOwnEmail");
+        var otherEmail  = getCookie("echoTreeOtherEmail");
+      } catch (err) {
+        thisEmail = undefined;
+        otherEmail = undefined;
+        alert("The EchoTree experiment server seems to be down. But please try to log in anyway.");
+      }
 
       if (typeof thisEmail !== "undefined")
         document.getElementById("playerName1").value = thisEmail;

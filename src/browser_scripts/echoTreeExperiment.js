@@ -111,7 +111,12 @@ if(typeof(WebSocket)!=="undefined") {
 	update(root);
     };
 
-
+    ws.onclose = function() {
+	// EchoTree server closed connection, likely b/c of a server restart:
+	window.location = "http://" + CONTACT_MACHINE + ":" + EXPERIMENT_FRONT_PAGE_PORT;
+	this.showMessage("EchoTree server closed our connection. Please log in again. Sorry for the inconvenience!");
+	
+    }
 } else {
     // WebSockets not supported in this browser:
     document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
@@ -130,6 +135,10 @@ function getCookie(c_name) {
 	}
     }
 }   
+
+this.showMsg = function(msg) {
+    alert(msg);
+}
 
 function update(source) {
     
@@ -332,10 +341,35 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	appendString = typeof appendString !== 'undefined' ? appendString : true;
 	prependDelimiter = typeof prependDelimiter !== 'undefined' ? prependDelimiter : true;
 
+	// If this call is the result of a word being shipped from
+	// elsewhere, to be appended to the local ticker, then do
+	// that. But if this call is the result of typing into the 
+	// local ticker, then just update the EchoTree if appropriate.
+	// Otherwise letters appear twice:
+	if (appendString)
+	    this.updateTicker(word, prependDelimiter);
+	t.update();
+
+	// Request a new EchoTree with a new word
+	// as the root, if this 'word' is a word delimiter:
+	if (word.match(/\W/) !== null) {
+	    // Get word before the delimiter:
+	    prevWord = wordTicker.getLatestWord();
+	    if (prevWord !== undefined)
+		//******If not space, but ". ": have trailing period now
+		sendNewRootWord(prevWord);
+	}
+	if (propagate) {
+	    // Tell experiment manager about the word to 
+	    // have it update score:
+	    expManager.onwordadded(word);
+	}
+    };
+
+    t.updateTicker = function(word, prependDelimiter) {
 	var tickerObj = document.getElementById("ticker");
 	words = tickerObj.value.split();
 	
-
 	// Implement backspace
 	if (word === "0x08") {
 	    lastWord = words[words.length - 1];
@@ -346,37 +380,25 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	    words.push(word);
 
 	content = t.arrToContent(words);
-	t.update();
 	tickerObj.value = content;
-
-	// Request a new EchoTree with a new word
-	// as the root, if this 'word' is a word delimiter:
-	if (word.match(/\W/) !== null) {
-	    // Get word before the delimiter:
-	    prevWord = wordTicker.getLatestWord();
-	    if (prevWord !== undefined)
-		sendNewRootWord(prevWord);
-	}
-	if (propagate) {
-	    // Tell experiment manager about the word to 
-	    // have it update score:
-	    expManager.onwordadded(word);
-	}
-    };
+    }
 
     t.getLatestWord = function() {
 	// Get the last word that's currently in the ticker. 
 	// If no real word is there (maybe empty, or just delimiters),
 	// then return undefined.
 	tickerContent = document.getElementById("ticker").value.trim();
-	tickerArr = tickerContent.split(/\b\s+/);
-	if (tickerArr.length == 0)
+	// Split by non-regular-chars:
+	tickerArr = tickerContent.split(/\W/);
+	// Periods produce empty strings in tickerArr:
+	// "foo. bar".split(/\W/) == ["foo", "", "bar"] or:
+	// "foo bar.".split(/\W/) == ["foo", "bar", ""]
+	// Remove the empty fields:
+	cleanTickerArr = tickerArr.filter(function(elVal, indx, arrObj) {return elVal.length > 0});
+	if (cleanTickerArr.length == 0)
 	    return undefined;
-	lastWord = tickerArr[tickerArr.length - 1];
-	if (lastWord.match(/\w+/g) !== null)
-	    return lastWord;
-	else
-	    return undefined;
+	lastWord = cleanTickerArr[cleanTickerArr.length - 1];
+	return lastWord;
     }
 
     t.arrToContent = function(wordArray) {
