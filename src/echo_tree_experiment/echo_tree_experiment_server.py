@@ -544,6 +544,7 @@ class EchoTreeLogService(WebSocketHandler):
                             msg = 'subscribeToTree:' + str(self.myPartnersID) + "|" + str(dyad.condition());
                             self.write_message(msg);
                         else:
+                            # I'm the disabled player:
                             msg = 'subscribeToTree:' + str(self.myPlayerID) + "|"  + str(dyad.condition());
                             dyad.getPartnerHandler().write_message(msg);
                         EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));

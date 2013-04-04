@@ -407,8 +407,10 @@ class EchoTreeService(WebSocketHandler):
     
     @staticmethod
     def triggerTreeComputationAndDistrib(treeContainer, newRootWord):
-        if newRootWord == treeContainer.currentRootWord():
-            return;
+#**********************
+#        if newRootWord == treeContainer.currentRootWord():
+#            return;
+#**********************
         treeContainer.setCurrentRootWord(newRootWord);
         EchoTreeService.TreeComputer.workQueue.put(treeContainer);
         
