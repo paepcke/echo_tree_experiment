@@ -2,13 +2,17 @@
 function ExperimentManager () {
 
     var that = this;
+
+    // Class vars:
+    ExperimentManager.prototype.DONT_PROPAGATE = false;
+    ExperimentManager.prototype.DO_PROPAGATE = true;
+    ExperimentManager.prototype.NO_APPEND = false;
+    ExperimentManager.prototype.DO_APPEND = true;
+    ExperimentManager.prototype.DONT_PREPEND_DELIMITER = false;
+    ExperimentManager.prototype.DO_PREPEND_DELIMITER = true;
+
+    // Instance vars:
     var wsExp = undefined;
-    var DONT_PROPAGATE = false;
-    var DO_PROPAGATE = true;
-    var NO_APPEND = false;
-    var DO_APPEND = true;
-    var DONT_PREPEND_DELIMITER = false;
-    var DO_PREPEND_DELIMITER = true;
     var ASCII_BACKSPACE = 8;
     var ASCII_SPACE = 32;
     var ASCII_Z = 90;
@@ -150,9 +154,15 @@ function ExperimentManager () {
 		if (whoami == 'partnerRole')
 		    document.getElementById('ticker').readOnly=false;
 		if (wordToAdd.length === 1)
-		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
+		    addToTicker(wordToAdd, 
+				expManager.DONT_PROPAGATE, 
+				expManager.DO_APPEND, 
+				expManager.DONT_PREPEND_DELIMITER);
 		else
-		    addToTicker(wordToAdd, DONT_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+		    addToTicker(wordToAdd, 
+				expManager.DONT_PROPAGATE, 
+				expManager.DO_APPEND, 
+				expManager.DO_PREPEND_DELIMITER);
 	    } catch (e) {
 	    } finally {
 		if (whoami == 'partnerRole') {
@@ -226,10 +236,10 @@ function ExperimentManager () {
 		return;
 	    }
 	// No shift key: Get periods, comma, etc. correct:
+	else if (keyCode == 8)
+	    charAsStr = "0x08";
 	else if (keyCode > 46) {
 	    charAsStr = keyCodeToCharNoShift[keyCode];
-	    if (charAsStr == "Backspace")
-		charAsStr = "0x08";
 	} else {
 	    // The following returns single, one-char string. If the 
 	    // key code is non-printable, the string will be empty:
@@ -247,7 +257,10 @@ function ExperimentManager () {
 	// If I'm the disabled player, send letter to partner.
 	// The typing already placed the letter in the text box,
 	// so no appending needed.
-	addToTicker(charAsStr, DO_PROPAGATE, NO_APPEND, DONT_PREPEND_DELIMITER);
+	addToTicker(charAsStr, 
+		    expManager.DO_PROPAGATE, 
+		    expManager.NO_APPEND, 
+		    expManager.DONT_PREPEND_DELIMITER);
     }
 
     this.onGoodGuessClicked = function () {

@@ -41,6 +41,24 @@ var vis = d3.select("#echotree").append('svg')
     .attr("transform", "translate(" + m[3] + "," + m[0] + ")");
 
 
+function getCookie(c_name) {
+    var i,x,y,ARRcookies=document.cookie.split(";");
+    for (i=0;i<ARRcookies.length;i++)
+    {
+	x=ARRcookies[i].substr(0,ARRcookies[i].indexOf("="));
+	y=ARRcookies[i].substr(ARRcookies[i].indexOf("=")+1);
+	x=x.replace(/^\s+|\s+$/g,"");
+	if (x==c_name)
+	{
+	    return unescape(y);
+	}
+    }
+}   
+
+// Get player IDs for myself and the other player:
+var thisEmail   = this.getCookie("echoTreeOwnEmail");
+var otherEmail  = this.getCookie("echoTreeOtherEmail");
+
 // Check for browser support:
 if(typeof(WebSocket)!=="undefined") {
 
@@ -53,11 +71,16 @@ if(typeof(WebSocket)!=="undefined") {
 	// Commented out because everyone is automatically 
 	// a subscriber of trees whose creation they trigger
 	// via submission of a new root word.
-	// subscribeCmd   = {'command':'subscribe',
-	// 		  'submitter':thisEmail, 
-	// 		  'treeCreator':thatEmail,
-	// 		  'treeType':'dmozRecreation'};
-	// ws.send(JSON.stringify(subscribeCmd));
+	// if (whoami === "partnerID") {
+	//     subscribeCmd   = {'command':'subscribe',
+	// 		      'submitter':thisEmail, 
+	// 		      'treeCreator':thatEmail,
+	// 		      'treeType':'dmozRecreation'};
+	//     ws.send(JSON.stringify(subscribeCmd));
+	// }
+	// Kickstart this connection by sending the root word
+	// 0 (zero). Doesn't matter what it is, just some word.
+	sendNewRootWord("0");
     };
 
     ws.onerror = function () {
@@ -121,20 +144,6 @@ if(typeof(WebSocket)!=="undefined") {
     // WebSockets not supported in this browser:
     document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
 }
-
-function getCookie(c_name) {
-    var i,x,y,ARRcookies=document.cookie.split(";");
-    for (i=0;i<ARRcookies.length;i++)
-    {
-	x=ARRcookies[i].substr(0,ARRcookies[i].indexOf("="));
-	y=ARRcookies[i].substr(ARRcookies[i].indexOf("=")+1);
-	x=x.replace(/^\s+|\s+$/g,"");
-	if (x==c_name)
-	{
-	    return unescape(y);
-	}
-    }
-}   
 
 this.showMsg = function(msg) {
     alert(msg);
@@ -245,7 +254,7 @@ function update(source) {
 }
 
 
-// Take a word from the new word test field, and tell browser to make
+// Take a word from the new word text field, and tell browser to make
 // that word into the new root.
 function sendNewRootWordFromTxtFld() {
     word = document.getElementById("newWord").value;
@@ -351,8 +360,10 @@ var ticker = function(id, tickerLength, wordDelimiter, maxChars) {
 	t.update();
 
 	// Request a new EchoTree with a new word
-	// as the root, if this 'word' is a word delimiter:
-	if (word.match(/\W/) !== null) {
+	// as the root, if this 'word' is a word delimiter,
+	// except for backspace, which shouldn't count as
+	// a delimiter:
+	if ((word !== "0x08") && (word.match(/\W/) !== null)) {
 	    // Get word before the delimiter:
 	    prevWord = wordTicker.getLatestWord();
 	    if (prevWord !== undefined)
@@ -447,7 +458,10 @@ function textMouseDown(node, el) {
     if (whoami === "disabledRole") {
 	addToTicker(node.word, DO_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
 	// Add a word delimiter to trigger tree creation and propagation:
-	addToTicker(" ", DO_PROPAGATE, DO_APPEND, DONT_PREPEND_DELIMITER);
+	addToTicker(" ",
+		    expManager.DO_PROPAGATE, 
+		    expManager.DO_APPEND, 
+		    expManager.DONT_PREPEND_DELIMITER);
     } else {
 	// This is the partner, and they just clicked on a word in their 
 	// EchoTree. Partners don't get to enter words into the ticker, but
@@ -496,6 +510,3 @@ function onRestart() {
     alert("RESTART");
 }
 
-// Get player IDs for myself and the other player:
-var thisEmail   = this.getCookie("echoTreeOwnEmail");
-var otherEmail  = this.getCookie("echoTreeOtherEmail");

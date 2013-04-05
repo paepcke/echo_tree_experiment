@@ -258,6 +258,7 @@ class EchoTreeService(WebSocketHandler):
     
             EchoTreeService.triggerTreeComputationAndDistrib(container, newRootWord);
             EchoTreeService.log("New root word from connected browser: '%s': '%s'" % (submitter,newRootWord));
+            return;
             
         elif cmd == 'subscribe':
             try:
