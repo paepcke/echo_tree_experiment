@@ -456,7 +456,10 @@ function colorAllLabels(color) {
 function textMouseDown(node, el) {
     colorLabel(el, fillColor);
     if (whoami === "disabledRole") {
-	addToTicker(node.word, DO_PROPAGATE, DO_APPEND, DO_PREPEND_DELIMITER);
+	addToTicker(node.word,
+		    expManager.DO_PROPAGATE,
+		    expManager.DO_APPEND,
+		    expManager.DO_PREPEND_DELIMITER);
 	// Add a word delimiter to trigger tree creation and propagation:
 	addToTicker(" ",
 		    expManager.DO_PROPAGATE, 
