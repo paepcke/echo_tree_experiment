@@ -35,6 +35,7 @@ import urlparse;
 import datetime;
 import random;
 import copy;
+import shelve;
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -73,6 +74,8 @@ RECREATION_DB_PATH = os.path.join(SCRIPT_DIR, "Resources/dmozRecreation.db");
 PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
 
 CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
+PARTICIPANT_RECORDS_PATH = os.path.join(CSV_OUTPUT_DIR, "participants"); 
+
 
 class Condition:
     RECREATION_NGRAMS = TreeTypes.RECREATION_NGRAMS;
@@ -82,6 +85,71 @@ class Role:
     DISABLED = 'disabledRole';
     PARTNER  = 'partnerRole';
 
+
+# -----------------------------------------  Classes Participant --------------------
+
+class Participant(object):
+    
+    def __init__(self, participantID):
+        self.creationtime = time.time();
+        # List of roles participant played (disabled/partner).
+        # List is not unique:
+        self.roles = [];
+        # Conditions participants operated under:
+        self.conditions = [];
+
+    def addRole(self, role):
+        self.roles.append(role);
+        
+    def addCondition(self, condition):
+        self.conditions.append(condition);
+        
+    def nextRole(self):
+        '''
+        Returns one of Role.PARTNER or Role.DISABLED.
+        If this participant never played, the returned
+        role is random. Else, the role less frequently
+        played is returned.
+        '''
+        if len(self.roles) == 0:
+            newRole = self.randomRole();
+            self.addRole(newRole)
+            return newRole;
+        playedDisabled = self.roles.count(Role.DISABLED);
+        playedPartner  = self.roles.count(Role.PARTNER);
+        return Role.DISABLED if min(playedDisabled, playedPartner) == playedDisabled else Role.PARTNER;
+
+    def nextCondition(self, otherPlayerObj):
+        '''
+        Returns next experimental condition a pair of players
+        should play under. If neither player has ever played,
+        a random condition is returned. Else the condition least
+        often played by both players is chosen.
+        @param otherPlayerObj:
+        @type otherPlayerObj:
+        '''
+        allConditions = self.conditions.extend(otherPlayerObj.conditions);
+        if len(allConditions) == 0:
+            newCondition = self.randomCondition();
+        else:
+            googleNgramCount = allConditions.count(Condition.GOOGLE_NGRAMS);
+            dmozRecreation   = allConditions.count(Condition.RECREATION_NGRAMS);
+            newCondition = Condition.GOOGLE_NGRAMS if min(googleNgramCount, dmozRecreation) == Condition.GOOGLE_NGRAMS else Condition.RECREATION_NGRAMS;
+        self.addCondition(newCondition);
+        otherPlayerObj.addCondition(newCondition);
+        return newCondition;
+    
+    def randomCondition(self):
+        if random.randint(0,1) == 0:
+            return Condition.RECREATION_NGRAMS;
+        else:
+            return Condition.GOOGLE_NGRAMS;
+        
+    def randomRole():
+        if random.randint(1,2) == 1:
+            return Role.DISABLED;
+        else:
+            return Role.PARTNER;
 # -----------------------------------------  Classes ExperimentPair, ParagraphScore --------------------
 
 class ExperimentDyad(object):
@@ -121,6 +189,7 @@ class ExperimentDyad(object):
         self.theCondition    = None;
         
         self.savedToFile = False;
+        self.numParScoresSaved = 0;
         
         # All ParagraphScore instances for this dyad
         self.parScores = [];
@@ -213,21 +282,27 @@ class ExperimentDyad(object):
         if outfilePath is None:
             outfilePath = EchoTreeLogService.gameOutputFilePath;
         with open(outfilePath, 'a') as fd:
-            fd.write(str(self.disabledID()) + ',' + str(self.partnerID()) + ',' +  str(self.condition()) + ',');
-            for i in range(len(self.parScores)):
+            # If we are saving the first paragraph's result,
+            # need disabledID, partnerID, and experimental condition:
+            if self.numParScoresSaved == 0:
+                fd.write(str(self.disabledID()) + ',' + str(self.partnerID()) + ',' +  str(self.condition()) + ',');
+            for i in range(self.numParScoresSaved, len(self.parScores)):
                 parScore = self.parScores[i];
                 # Compute number of letters typed: each word that was
                 # inserted from the tree counts only for one letter:
-                numLetters = len(parScore.typedWords);
-                for word in parScore.insertedWords:
-                    numLetters -= len(word) - 1; # -1 is to count one of the letters.
-                fd.write(str(parScore.parID) +\
+                numTokens = len(parScore.tickerTokens);
+                fd.write(str(parScore.parID) + ',' +\
                          str(parScore.startTime) + ',' +\
                          str(parScore.stopTime) + ',' +\
                          str(parScore.numGoodGuesses) + ',' +\
-                         str(parScore.numLettersTyped) + ',' +\
-                         str(parScore.changeLog));
+                         str(numTokens) + ',' +\
+                         str(parScore.changeLog) + ',');
         self.setSavedToFile(True);
+        # We saved some more paragraph scores. Remember 
+        # the next index into the parScore array that will
+        # need to be saved, once another score is added:
+        self.numParScoresSaved = len(self.parScores);
+        
         
 class ParagraphScore(object):
     
@@ -246,15 +321,14 @@ class ParagraphScore(object):
         self.numLettersTyped  = 0;
         
         self.numGoodGuesses = 0;
-        # Words typed by the disabled:
-        self.typedWords = "";
-        # Words inserted via clicking on a word in the tree:
-        self.insertedWords = [];
+        # Words or typed letters that were inserted into
+        # the disabled player's ticker:
+        self.tickerTokens = [];
         # Log for every change:
         self.changeLog = {'insertWord':[], 'goodnessClick':[]};
         
     def addInsertedWord(self, word):
-        self.insertedWords.append(word);
+        self.tickerTokens.append(word);
         self.numLettersTyped += 1;
         self.changeLog['insertWord'].append(time.time());
         self.dyadParent.setSavedToFile(False);
@@ -294,6 +368,10 @@ class EchoTreeLogService(WebSocketHandler):
     
     # Lock protecting access to dyads dict:
     dyadLock = Lock();
+    
+    # Lock for modifying participant shelf:
+    participantRecordLock = Lock();
+    
     
     # Output file path for this run of the server.
     # This path is computed and this class var is
@@ -418,13 +496,15 @@ class EchoTreeLogService(WebSocketHandler):
         # asking for its first paragraph. The arg is -1 in that case.
         if (msgArr[0] == 'parDone'):
             self.myDyad.currentParScore().setStopTime();
+            self.myDyad.saveToCSV();
             newParID = self.startNewPar(self.myDyad);
             if newParID is None:
                 # Game done. All NUM_OF_PARS_PER_SESSION paragraphs have
                 # been communicated:
+                with open(EchoTreeLogService.gameOutputFilePath, 'a') as fd:
+                    fd.write("\n");
                 self.write_message('done:');
                 self.myDyad.getThatHandler().write_message('done:');
-                self.myDyad.saveToCSV();
                 self.handleGameDone();
                 return;
     
@@ -587,7 +667,7 @@ class EchoTreeLogService(WebSocketHandler):
                 # and the player ids as the rest:
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
-                # Randomly select an exerimental condition:
+                # Select an exerimental condition:
                 initialCondition = EchoTreeLogService.decideNewPlayersCondition();
                 newDyad.setCondition(initialCondition);
                 ExperimentDyad.allDyads[thisEmail] = [newDyad];
@@ -630,12 +710,29 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
+        # Get both participant's permanent record, if they exist:
+        with EchoTreeLogService.participantRecordLock:
+            participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
+            try:
+                contactingParticipant = participantDict[contactingEmail];
+            except KeyError:
+                contactingParticipant = Participant(contactingEmail);
+                participantDict[contactingEmail] = contactingParticipant;
+            try:
+                friendParticipant =  participantDict[friendEmail];
+            except KeyError:
+                friendParticipant = Participant(friendEmail);
+                participantDict[friendEmail] = friendParticipant;
+            participantDict.close();
+        
         with EchoTreeLogService.dyadLock:
             try:
                 newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
             except KeyError:
-                # Totally new person:
-                return EchoTreeLogService.randomRole();
+                # No existing dyad yet; nextRole() will make pick
+                # by player's previous roles, or random choice:
+                newRole = contactingParticipant.nextRole();
+                return newRole;
             for dyad in newPlayersDyads:
                 if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
                     # Dyad was opened for a friend of the new player. So the
@@ -646,18 +743,26 @@ class EchoTreeLogService(WebSocketHandler):
     
     @staticmethod
     def decideNewPlayersCondition():
-        if random.randint(0,1) == 0:
-            return Condition.RECREATION_NGRAMS;
-        else:
-            return Condition.GOOGLE_NGRAMS;
+        initialCondition = None;
+        with EchoTreeLogService.participantRecordLock:
+            participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
+            try:
+                thisParticipant = participantDict[thisEmail];
+            except KeyError:
+                thisParticipant = Participant(thisEmail);
+                participantDict[thisEmail] = thisParticipant;
+            try:
+                thatParticipant =  participantDict[thatEmail];
+            except KeyError:
+                thatParticipant = Participant(thatEmail);
+                participantDict[thatEmail] = thatParticipant;
+            initialCondition = thisParticipant.nextCondition(thatParticipant);
+            # Need to update the shelf dict with the modified entries:
+            participantDict[thisEmail] = thisParticipant;
+            participantDict[thatEmail] = thatParticipant;
+            PARTICIPANT_RECORDS_PATH.close();
+        return initialCondition;
                             
-    @staticmethod
-    def randomRole():
-        if random.randint(1,2) == 1:
-            return Role.DISABLED;
-        else:
-            return Role.PARTNER;
-
     @staticmethod
     def deletePlayer(playerID):
         with EchoTreeLogService.dyadLock:
@@ -738,6 +843,7 @@ class EchoTreeLogService(WebSocketHandler):
                     handler.write_message(msg);
                     EchoTreeLogService.log("Message to participant: " + msg);
     
+
 # --------------------  Request Handler Class for browsers: serves HTML pages and javascript -------------------
 
 

@@ -184,7 +184,7 @@ function ExperimentManager () {
 	    // to clear the tree completely. If no new-root-word message was
 	    // ever received, collapse is not yet defined, catch that condition:
 	    try {
-		collapse(root);
+		endNewRootWord("0");
 	    } catch(err) {
 	    }
 
@@ -269,6 +269,20 @@ function ExperimentManager () {
 
     this.onParCompleteClicked = function () {
 	wsExp.send("parDone:" + this.currParID);
+    }
+
+    window.onunload = function() {
+	// If user hits back button or reload, the browser
+	// unloads the page, and then calls this function.
+	// Closing the WebSocket gets the experiment server
+	// to clean up. The try/catch is relevant b/c
+	// in screwy situations, unload happens before
+	// wsExp was openend.
+	try {
+	    wsExp.close();
+	} catch (e) {}
+	// Used to try and put up an alert(), but that gets blocked during
+	// unload.
     }
 
     this.showMsg = function(msg) {
