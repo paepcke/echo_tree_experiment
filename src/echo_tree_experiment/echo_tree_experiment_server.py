@@ -165,9 +165,11 @@ class Participant(object):
         player.
         @param theMateID: ID of player to find in played-with list
         @type theMateID: string
+        @return: number of times this player, and the given player have played together.
+        @rtype: int
         '''
         played = 0;
-        for mateIT in self.playmates:
+        for mateID in self.playmates:
             if mateID == theMateID:
                 played += 1;
         return played;
@@ -353,8 +355,8 @@ class ExperimentDyad(object):
         if len(self.parScores) >= NUM_OF_PARS_PER_ROUND:
             return None;
         with LoadedParticipants():
-            disabledParticipant = participantDict[self.disabledID()];
-            partnerParticipant  = participantDict[self.partnerID()];
+            disabledParticipant = EchoTreeLogService.participantDict[self.disabledID()];
+            partnerParticipant  = EchoTreeLogService.participantDict[self.partnerID()];
                     
             while True:
                 newParID = random.randint(0,len(EchoTreeLogService.paragraphs) - 1);
@@ -369,8 +371,8 @@ class ExperimentDyad(object):
             partnerParticipant.addPar(newParID);
             # Must explicitly write over the entries, b/c shelved  
             # datastructures are immutable:
-            participantDict[self.disabledID()] = disabledParticipant;
-            participantDict[self.partnerID()]  = partnerParticipant; 
+            EchoTreeLogService.participantDict[self.disabledID()] = disabledParticipant;
+            EchoTreeLogService.participantDict[self.partnerID()]  = partnerParticipant; 
                 
         return newParID; 
 
@@ -614,7 +616,16 @@ class EchoTreeLogService(WebSocketHandler):
         completedDyad.setDyadCompleted();
         # Have these two players played enough games for
         # their experiment to be complete?
-        ****
+        with LoadedParticipants():
+            thisParticipant = EchoTreeLogService.participantDict[self.myPlayerID];
+            numPlayed = thisParticipant.playedWith(self.myPartnersID);
+            if numPlayed >= 2:
+                # Experiment done:
+                completedDyad.thisHandler.write_message("done");
+                completedDyad.thisHandler.write_message("pleaseClose");
+                completedDyad.thatHandler.write_message("done");
+                completedDyad.thatHandler.write_message("pleaseClose");
+                return;
         
         # Get something like mono.stanford.edu:5004, or localhost:5004:
         hostPlusPort = self.request.host;
@@ -740,6 +751,22 @@ class EchoTreeLogService(WebSocketHandler):
         self.myPlayerID   = thisEmail;
         self.myPartnersID = thatEmail;
         self.myRole       = role;
+        
+        # Check whether these two players played together more than once:
+        with LoadedParticipants():
+            thisParticipant = EchoTreeLogService.participantDict[self.myPlayerID];
+            numPlayed = thisParticipant.playedWith(self.myPartnersID);
+            if numPlayed >= 2:
+                msg = "The two of you have already played two games together. The experiment " +\
+                      "is designed to have each pair play two games. If you are trying again because " +\
+                      "earlier attempts failed for technical reasons, then please log in again adding " +\
+                      "the number 1 to both of your emails. It's OK that the emails are then no longer " +\
+                      "truly yours. If, ban the thought, more than one technical flop happens, keep using the " +\
+                      "next higher number, in this case 2."
+                      
+                self.write_message("pleaseClose" + OP_CODE_SEPARATOR + msg);
+                return;
+        
         with EchoTreeLogService.dyadLock:
             try:
                 thisPlayersDyads = ExperimentDyad.allDyads[thisEmail];
@@ -853,25 +880,20 @@ class EchoTreeLogService(WebSocketHandler):
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
         # Get both participant's permanent record, if they exist:
-        with EchoTreeLogService.participantRecordLock:
+        with LoadedParticipants():
             try:
-                participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
-    
-                try:
-                    contactingParticipant = participantDict[contactingPlayerEmail];
-                except KeyError:
-                    contactingParticipant = Participant(contactingPlayerEmail);
-                contactingParticipant.addPlaymate(friendEmail);
-                participantDict[contactingPlayerEmail] = contactingParticipant;
-    
-                try:
-                    friendParticipant =  participantDict[friendEmail];
-                except KeyError:
-                    friendParticipant = Participant(friendEmail);
-                friendParticipant.addPlaymate(contactingPlayerEmail);
-                participantDict[friendEmail] = friendParticipant;
-            finally:
-                participantDict.close();
+                contactingParticipant = EchoTreeLogService.participantDict[contactingPlayerEmail];
+            except KeyError:
+                contactingParticipant = Participant(contactingPlayerEmail);
+            contactingParticipant.addPlaymate(friendEmail);
+            EchoTreeLogService.participantDict[contactingPlayerEmail] = contactingParticipant;
+
+            try:
+                friendParticipant =  EchoTreeLogService.participantDict[friendEmail];
+            except KeyError:
+                friendParticipant = Participant(friendEmail);
+            friendParticipant.addPlaymate(contactingPlayerEmail);
+            EchoTreeLogService.participantDict[friendEmail] = friendParticipant;
         
         with EchoTreeLogService.dyadLock:
             try:
@@ -916,29 +938,28 @@ class EchoTreeLogService(WebSocketHandler):
     @staticmethod
     def decideNewPlayersCondition(thisEmail, thatEmail):
         initialCondition = None;
-        with EchoTreeLogService.participantRecordLock:
+        with LoadedParticipants():
             # Find an experimental condition (googleNgrams, dmozRecreation, etc.),
             # that spreads exposure across players. Retrieve
             # persistent participant dict:
-            participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
             try:
-                thisParticipant = participantDict[thisEmail];
+                thisParticipant = EchoTreeLogService.participantDict[thisEmail];
             except KeyError:
                 thisParticipant = Participant(thisEmail);
-                participantDict[thisEmail] = thisParticipant;
+                EchoTreeLogService.participantDict[thisEmail] = thisParticipant;
             try:
-                thatParticipant =  participantDict[thatEmail];
+                thatParticipant =  EchoTreeLogService.participantDict[thatEmail];
             except KeyError:
                 thatParticipant = Participant(thatEmail);
-                participantDict[thatEmail] = thatParticipant;
+                EchoTreeLogService.participantDict[thatEmail] = thatParticipant;
                 
             # Given the two participants, find the new condition to use:
             initialCondition = thisParticipant.nextCondition(thatParticipant);
             
             # Need to update the shelf dict with the modified entries:
-            participantDict[thisEmail] = thisParticipant;
-            participantDict[thatEmail] = thatParticipant;
-            participantDict.close();
+            EchoTreeLogService.participantDict[thisEmail] = thisParticipant;
+            EchoTreeLogService.participantDict[thatEmail] = thatParticipant;
+
         return initialCondition;
                             
     @staticmethod

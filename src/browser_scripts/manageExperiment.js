@@ -243,13 +243,14 @@ function ExperimentManager () {
 	    this.deliverGoodGuessFeedback();
 	    break;
 	case "done":
-	    this.showMsg("All done. Thank you!");
+	    this.showMsg("All done. Thank you for your help!");
 	    break;
 	case "pleaseClose":
 	    var closeReason = cmdArr.shift();
 	    wsExp.close();
 	    window.location = "http://" + CONTACT_MACHINE + ":" + EXPERIMENT_FRONT_PAGE_PORT;
-	    this.showMsg(closeReason);
+	    if (typeof closeReason !== 'undefined')
+		this.showMsg(closeReason)
 	    break;
 	}
     }
