@@ -1,4 +1,11 @@
 
+function setCookie(c_name,value,exdays) {
+    var exdate=new Date();
+    exdate.setDate(exdate.getDate() + exdays);
+    var c_value=escape(value) + ((exdays==null) ? "" : "; expires="+exdate.toUTCString());
+    document.cookie=c_name + "=" + c_value;
+}
+
 function ExperimentManager () {
 
     var that = this;
@@ -17,6 +24,11 @@ function ExperimentManager () {
     var ASCII_SPACE = 32;
     var ASCII_Z = 90;
     var ASCII_DEL = 126;
+
+    // Chars separating msg operators from args:
+    var OP_CODE_SEPARATOR = '>';
+    // Char separating multiple msg args:
+    var ARGS_SEPARATOR    = '|';
 
     var currParID = -1;
     var myID    = undefined;
@@ -74,13 +86,13 @@ function ExperimentManager () {
 
 	if (cmdStr.length == 0)
 	    return;
-	var cmdArr = cmdStr.split(":");
+	var cmdArr = cmdStr.split(OP_CODE_SEPARATOR);
 	cmdOp = cmdArr.shift();
 
 	switch (cmdOp) {
 	case "test":
 	    //alert("Got test message");
-	    wsExp.send("test: " + whoami + " got it.");
+	    wsExp.send("test" + OP_CODE_SEPARATOR + " " + whoami + " got it.");
 
 	    break;
 	case "showMsg":
@@ -109,7 +121,7 @@ function ExperimentManager () {
 		document.getElementById('ticker').readOnly=true;
 	    }
 	    
-    	    wsExp.send("login:role=" + whoami + 
+    	    wsExp.send("login" + OP_CODE_SEPARATOR + "role=" + whoami + 
     		       " disabledID=" + disabledID + 
     		       " partnerID=" + partnerID);
 	    break;
@@ -184,7 +196,7 @@ function ExperimentManager () {
 	    // to clear the tree completely. If no new-root-word message was
 	    // ever received, collapse is not yet defined, catch that condition:
 	    try {
-		endNewRootWord("0");
+		sendNewRootWord("0");
 	    } catch(err) {
 	    }
 
@@ -199,6 +211,33 @@ function ExperimentManager () {
 	    // Show the new text to be entered:
 	    document.getElementById("taskText").value= parIDAndParStr[1];
 	    this.showMsg("Please start on the new sentence in the top orange box.");
+	    break;
+	case "newAssignment":
+	    // Get ownEmail|otherEmail|URLToLoad. Stupidly,
+	    //
+	    var rest = cmdArr.shift();
+	    var restFrags = rest.split('|');
+	    var ownEmail    = restFrags.shift();
+	    var otherEmail  = restFrags.shift();
+	    var URLToLoad   = restFrags.shift();
+	    // Remember the emails to save them across the impending load
+	    // of the disabled.html or partner.html page (20 days expiration):
+	    setCookie("echoTreeOwnEmail", ownEmail, 20);
+	    setCookie("echoTreeOtherEmail", otherEmail, 20);
+
+	    if (whoami === 'disabledRole') {
+		whoami = 'partnerRole';
+	    } else {
+		whoami = 'disabledRole';
+	    }
+	    // onunload is bound to onunload() from the
+	    // previous game. Disable that function, so that
+	    // loading the next page won't immediately close
+	    // the WebSocket:
+	    window.onunload = undefined;
+	    // Load the new UI (disabled or partner page):
+	    window.location.assign(URLToLoad);
+	    // Next the server will send some instructions to show.
 	    break;
 	case "goodGuessClicked":
 	    this.deliverGoodGuessFeedback();
@@ -216,7 +255,7 @@ function ExperimentManager () {
     }
 
     this.onwordadded = function(word) {
-	wsExp.send("addWord:" + word);
+	wsExp.send("addWord" + OP_CODE_SEPARATOR + word);
     }
 
     this.ontickertyped = function(evt) {
@@ -264,11 +303,11 @@ function ExperimentManager () {
     }
 
     this.onGoodGuessClicked = function () {
-	wsExp.send("goodGuessClicked:");
+	wsExp.send("goodGuessClicked" + OP_CODE_SEPARATOR);
     }
 
     this.onParCompleteClicked = function () {
-	wsExp.send("parDone:" + this.currParID);
+	wsExp.send("parDone" + OP_CODE_SEPARATOR + this.currParID);
     }
 
     window.onunload = function() {

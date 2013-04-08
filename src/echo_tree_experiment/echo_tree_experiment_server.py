@@ -14,7 +14,7 @@ Protocol:
        addWord: <wordTyped>
        goodGuessClicked:       # Only sent by disabled. Server records the click in the score, and also notifies partner 
        login: role=disabledRole disabledID=disabledEmail partnerID=partnerEmail
-       parDone: <parID>        # Only sent by disabled. Server records event, and returns a new par, or "done:".
+       parDone<OP_CODE_SEPARATOR> <parID>        # Only sent by disabled. Server records event, and returns a new par, or "done".
                                # <parId> is -1 one for the first call that asks for the first paragraph.  
        test:
    Server to player:
@@ -52,7 +52,11 @@ ECHO_TREE_PAGE_SERVICE_PORT = 5003
 ECHO_TREE_EXPERIMENT_SERVICE_PORT = 5004;
 
 # Number of paragraphs to communicate during one game:
-NUM_OF_PARS_PER_SESSION = 10;
+#***********NUM_OF_PARS_PER_SESSION = 10;
+NUM_OF_PARS_PER_ROUND = 2;
+# Number of rounds each pair of players play before
+# their experiment is done:
+NUM_OF_ROUNDS_PER_DYAD = 2;
 
 DISABLED_PAGE_NAME = "disabled.html";
 PARTNER_PAGE_NAME = "partner.html";
@@ -65,6 +69,12 @@ HTML_MIME = "text/html";
 CSS_MIME  = "text/css";
 JS_MIME   = "application/javascript";
 
+# Char separating message opcodes from args.
+# Ex: showMsg>foobar
+# Ex: newAssignment>myEmail|yourEmail|http://localhost:5003/disabled.html
+OP_CODE_SEPARATOR = '>';
+ARGS_SEPARATOR = '|';
+
 SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__));
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(SCRIPT_DIR, "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
@@ -74,7 +84,14 @@ RECREATION_DB_PATH = os.path.join(SCRIPT_DIR, "Resources/dmozRecreation.db");
 PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
 
 CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
-PARTICIPANT_RECORDS_PATH = os.path.join(CSV_OUTPUT_DIR, "participants"); 
+PARTICIPANT_RECORDS_PATH = os.path.join(CSV_OUTPUT_DIR, "participants.shelve"); 
+
+DISABLED_INSTRUCTIONS = "Please begin typing the sentence shown in the top orange box. Your opposite player will try to guess. " +\
+                        "Click the 'Sentence is done' button when the guess captures the spirit of the sentence." +\
+                        "Click the That's close... button when a guess lets you skip some typing. Pick up typing where needed " +\
+                        "to complete the sentence, given what your opposite now guessed. Click this button also if you finish the entire sentence."
+
+PARTNER_INSTRUCTIONS  = "As your opposite player types, you will see the emerging information. Please guess the emerging sentence over the phone."
 
 
 class Condition:
@@ -88,7 +105,37 @@ class Role:
 
 # -----------------------------------------  Classes Participant --------------------
 
+class LoadedParticipants:
+    '''
+    'With'-facility to use for the persistent participants dictionary
+    shelve. Usage:
+       with LoadedParticipants():
+           meParticipant = EchoTreeLogService.participantDict['me@google.com']
+           meParticipant.addRole(Role.DISABLED)
+           EchoTreeLogService.participantDict['me@google.com'] = meParticipant
+           
+    or:
+       with LoadedParticipants():
+           return EchoTreeLogService.participantDict['me@google.com'].playedWith('you@google.com')
+       
+    '''
+    def __enter__(self):
+        EchoTreeLogService.participantRecordLock.acquire();
+        EchoTreeLogService.participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
+        
+    def __exit__(self, type, value, traceback):
+        EchoTreeLogService.participantDict.close();
+        EchoTreeLogService.participantRecordLock.release();
+
 class Participant(object):
+    '''
+    This class is special in that it is used in a persistent
+    shelve. The information in its instances ensures that
+    participants get a mix of roles and conditions, and
+    that they do not play the same role twice with the 
+    same partner (though this requirement might be waived
+    to allow for makeup sessions?).  
+    '''
     
     def __init__(self, participantID):
         self.creationtime = time.time();
@@ -97,12 +144,50 @@ class Participant(object):
         self.roles = [];
         # Conditions participants operated under:
         self.conditions = [];
+        # Partners this participant played with:
+        self.playmates = [];
+        # Sentences this participant has seen:
+        self.seenPars = [];
 
     def addRole(self, role):
         self.roles.append(role);
         
     def addCondition(self, condition):
         self.conditions.append(condition);
+        
+    def addPlaymate(self, mateID):
+        self.playmates.append(mateID);
+        
+    def playedWith(self, theMateID):
+        '''
+        Given a playerID, return number of times 
+        this participant has played with that given
+        player.
+        @param theMateID: ID of player to find in played-with list
+        @type theMateID: string
+        '''
+        played = 0;
+        for mateIT in self.playmates:
+            if mateID == theMateID:
+                played += 1;
+        return played;
+    
+    def addPar(self, parID):
+        self.seenPars.append(parID);
+        
+    def parSeen(self, parID):
+        '''
+        Returns True/False to indicate whether this participant
+        was ever exposed to the given paragraph, either as disabled,
+        or as partner.
+        @param parID: ID of paragraph in question
+        @type parID: int
+        '''
+        try:
+            self.seenPars.index(parID);
+            return True;
+        except ValueError:
+            return False;
         
     def nextRole(self):
         '''
@@ -128,7 +213,11 @@ class Participant(object):
         @param otherPlayerObj:
         @type otherPlayerObj:
         '''
-        allConditions = self.conditions.extend(otherPlayerObj.conditions);
+        # Get the list of all conditions either player
+        # has played under:
+        allConditions = copy.copy(self.conditions);
+        allConditions.extend(otherPlayerObj.conditions);
+        
         if len(allConditions) == 0:
             newCondition = self.randomCondition();
         else:
@@ -137,7 +226,9 @@ class Participant(object):
             newCondition = Condition.GOOGLE_NGRAMS if min(googleNgramCount, dmozRecreation) == Condition.GOOGLE_NGRAMS else Condition.RECREATION_NGRAMS;
         self.addCondition(newCondition);
         otherPlayerObj.addCondition(newCondition);
-        return newCondition;
+        #************!!!!!!  Change when googleNgrams are available
+        #return newCondition;
+        return Condition.RECREATION_NGRAMS;
     
     def randomCondition(self):
         if random.randint(0,1) == 0:
@@ -145,7 +236,7 @@ class Participant(object):
         else:
             return Condition.GOOGLE_NGRAMS;
         
-    def randomRole():
+    def randomRole(self):
         if random.randint(1,2) == 1:
             return Role.DISABLED;
         else:
@@ -176,6 +267,7 @@ class ExperimentDyad(object):
         self.thePartnerID    = partnerID;
         self.instantiatorRole = instantiatorRole;
         self.dyadLoggedIn = False;
+        self.dyadCompleted = False;
         self.thisHandler  = theInstantiatingHandler;
         if instantiatorRole == Role.DISABLED:
             self.disabledHandler = theInstantiatingHandler;
@@ -193,12 +285,6 @@ class ExperimentDyad(object):
         
         # All ParagraphScore instances for this dyad
         self.parScores = [];
-        
-        # All the paragraphs used by this dyad before.
-        # Keys are integers between 0 and the number of
-        # paragraphs in file PARAGRAPHS_PATH. That
-        # file is internalized into EchoTreeLogServices.paragraphs:
-        self.parsUsed  = {};
         
         self.creationTime = time.time();
 
@@ -229,6 +315,12 @@ class ExperimentDyad(object):
     def setDyadLoggedIn(self, state=True):
         self.dyadLoggedIn = state;
         
+    def isDyadCompleted(self):
+        return self.dyadCompleted;
+        
+    def setDyadCompleted(self):
+        self.dyadCompleted = True;
+        
     def getThisHandler(self):
         return self.thisHandler;
 
@@ -258,19 +350,29 @@ class ExperimentDyad(object):
         @return: paragraph ID
         @rtype: int
         '''
-        if len(self.parsUsed) >= NUM_OF_PARS_PER_SESSION:
+        if len(self.parScores) >= NUM_OF_PARS_PER_ROUND:
             return None;
-        while True:
-            newParID = random.randint(0,len(EchoTreeLogService.paragraphs) - 1);
-            try:
-                self.parsUsed[newParID];
-                # If we didn't bomb out, we used this par
-                # already:
-                continue;
-            except KeyError:
-                self.parsUsed[newParID] = True;
-                self.parScores.append(ParagraphScore(self, self.condition(), newParID, self.disabledID(), self.partnerID()));
-                return newParID; 
+        with LoadedParticipants():
+            disabledParticipant = participantDict[self.disabledID()];
+            partnerParticipant  = participantDict[self.partnerID()];
+                    
+            while True:
+                newParID = random.randint(0,len(EchoTreeLogService.paragraphs) - 1);
+                if disabledParticipant.parSeen(newParID) or partnerParticipant.parSeen(newParID):
+                    continue;
+                else:
+                    break;
+            # Create a new score object for this sentence:
+            self.parScores.append(ParagraphScore(self, self.condition(), newParID, self.disabledID(), self.partnerID()));
+            # Persistently record that these two players were exposed to this par:
+            disabledParticipant.addPar(newParID);
+            partnerParticipant.addPar(newParID);
+            # Must explicitly write over the entries, b/c shelved  
+            # datastructures are immutable:
+            participantDict[self.disabledID()] = disabledParticipant;
+            participantDict[self.partnerID()]  = partnerParticipant; 
+                
+        return newParID; 
 
     def saveToCSV(self, outfilePath=None):
         '''
@@ -448,11 +550,11 @@ class EchoTreeLogService(WebSocketHandler):
         EchoTreeLogService.log("Message from participant: '%s'." % subjectMsg);
         if (len(subjectMsg) == 0):
             return;
-        msgArr = subjectMsg.split(':');
+        msgArr = subjectMsg.split(OP_CODE_SEPARATOR);
         
         if (msgArr[0] == 'test'):
             self.selfTest.append('partnerSubjectResponded');
-            self.write_message('sendLogin:')
+            self.write_message('sendLogin' + OP_CODE_SEPARATOR)
             return;
 
         # Is browser reporting the players' email addresses?
@@ -482,14 +584,14 @@ class EchoTreeLogService(WebSocketHandler):
             curParScore.addInsertedWord(word);
             # Echo the word/letter to the partner:
             if self.myDyad.getThisHandler() == self:
-                self.myDyad.getThatHandler().write_message("addWord:" + word);
+                self.myDyad.getThatHandler().write_message("addWord" + OP_CODE_SEPARATOR + word);
             else:
-                self.myDyad.getThisHandler().write_message("addWord:" + word);
+                self.myDyad.getThisHandler().write_message("addWord" + OP_CODE_SEPARATOR + word);
 
         if (msgArr[0] == 'goodGuessClicked'):
             self.myDyad.currentParScore().addGoodnessClick();
             # Tell partner so feedback can be given:
-            self.myDyad.getThatHandler().write_message("goodGuessClicked:");
+            self.myDyad.getThatHandler().write_message("goodGuessClicked" + OP_CODE_SEPARATOR);
             
         # Is browser reporting that one paragraph is all done?
         # (Note this msg is also used when a disabled partner is
@@ -499,19 +601,56 @@ class EchoTreeLogService(WebSocketHandler):
             self.myDyad.saveToCSV();
             newParID = self.startNewPar(self.myDyad);
             if newParID is None:
-                # Game done. All NUM_OF_PARS_PER_SESSION paragraphs have
-                # been communicated:
+                # Game done. All NUM_OF_PARS_PER_ROUND paragraphs have
+                # been communicated. Add a CR to the CSV file to finish
+                # the row for this round:
                 with open(EchoTreeLogService.gameOutputFilePath, 'a') as fd:
                     fd.write("\n");
-                self.write_message('done:');
-                self.myDyad.getThatHandler().write_message('done:');
-                self.handleGameDone();
+                self.handleGameDone(self.myDyad);
                 return;
     
-    def handleGameDone(self):
-        #**********
-        # Turn players around.
-        EchoTreeLogService.log("Game done.");
+    def handleGameDone(self, completedDyad):
+        # This dyad is done:
+        completedDyad.setDyadCompleted();
+        # Have these two players played enough games for
+        # their experiment to be complete?
+        ****
+        
+        # Get something like mono.stanford.edu:5004, or localhost:5004:
+        hostPlusPort = self.request.host;
+        host = hostPlusPort.split(':')[0];
+        if self.myRole == Role.DISABLED:
+            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
+            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
+        else:
+            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
+            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
+        myMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + myUrlToLoad
+        otherMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + otherUrlToLoad
+        
+        completedDyad.thatHandler.write_message(otherMsg);
+        completedDyad.thisHandler.write_message(myMsg);
+        
+        if self.myRole == Role.DISABLED:
+            myNewRole = Role.PARTNER
+            otherNewRole = Role.DISABLED;
+            otherOldRole = Role.PARTNER;
+        else:
+            myNewRole = Role.DISABLED;
+            otherNewRole = Role.PARTNER;
+            otherOldRole = Role.DISABLED;
+            
+        instructions = "showMsg" + OP_CODE_SEPARATOR + "Now the two of you will switch roles: ";
+        if myNewRole == Role.PARTNER:
+            instructions += PARTNER_INSTRUCTIONS;
+            completedDyad.thisHandler.write_message(instructions);
+        else:
+            instructions += DISABLED_INSTRUCTIONS;
+            completedDyad.thatHandler.write_message(instructions);
+        
+        EchoTreeLogService.log("Game switched. %s (was %s) is now %s; %s (was %s) is now %s" % 
+                               (self.myPlayerID, self.myRole, myNewRole, self.myPartnersID, otherOldRole, otherNewRole));
+        
     
     def on_close(self):
         '''
@@ -531,7 +670,7 @@ class EchoTreeLogService(WebSocketHandler):
             EchoTreeLogService.log("Browser at %s (%s) now disconnected." % (self.request.host, self.request.remote_ip));
 
     def sendMsgToBrowser(self, msg):
-        self.write_message('showMsg:' + msg);
+        self.write_message('showMsg' + OP_CODE_SEPARATOR + msg);
 
     def processLogin(self, msgArr):
         '''
@@ -593,7 +732,7 @@ class EchoTreeLogService(WebSocketHandler):
                 # no diad chain needs repairing.
                 pass;
                 
-            self.write_message("showMsg:Back here it looks as if player '%s' is trying to play with another player of the same name. " % thisEmail +\
+            self.write_message("showMsg" + OP_CODE_SEPARATOR + "Back here it looks as if player '%s' is trying to play with another player of the same name. " % thisEmail +\
                                "Trying to recover. Please go to the starting URL. So sorry.");
             return; 
         
@@ -605,6 +744,9 @@ class EchoTreeLogService(WebSocketHandler):
             try:
                 thisPlayersDyads = ExperimentDyad.allDyads[thisEmail];
                 for dyad in thisPlayersDyads:
+                    # Skip old dyads that are complete:
+                    if dyad.isDyadCompleted():
+                        continue;
                     dyadDisabledID = dyad.disabledID();
                     dyadPartnerID  = dyad.partnerID();
                     if (thisEmail == dyadDisabledID and thatEmail == dyadPartnerID) or \
@@ -621,26 +763,26 @@ class EchoTreeLogService(WebSocketHandler):
                         # If this logging-in player is a partner, have
                         # him subscribe to the disabled's tree:
                         if self.myRole == Role.PARTNER: 
-                            msg = 'subscribeToTree:' + str(self.myPartnersID) + "|" + str(dyad.condition());
+                            msg = 'subscribeToTree' + OP_CODE_SEPARATOR + str(self.myPartnersID) + ARGS_SEPARATOR + str(dyad.condition());
                             self.write_message(msg);
                         else:
                             # I'm the disabled player:
-                            msg = 'subscribeToTree:' + str(self.myPlayerID) + "|"  + str(dyad.condition());
+                            msg = 'subscribeToTree' + OP_CODE_SEPARATOR + str(self.myPlayerID) + ARGS_SEPARATOR + str(dyad.condition());
                             dyad.getPartnerHandler().write_message(msg);
                         EchoTreeLogService.log("Dyad complete: %s/%s" % (thisEmail, thatEmail));
-                        self.write_message('dyadComplete:');
+                        self.write_message('dyadComplete' + OP_CODE_SEPARATOR);
                         # Notify the already waiting player. When players hit the re-load button,
                         # there can be a race condition, in which thisHandler is set to
                         # None, even after we check for that condition. So instead of 
                         # checking we use try/catch:
                         thisHandler = dyad.getThisHandler();
                         try:
-                            thisHandler.write_message("dyadComplete:");
+                            thisHandler.write_message("dyadComplete" + OP_CODE_SEPARATOR);
                         except AttributeError:
                             EchoTreeLogService.log("Found thisHandler to be None: dyad's disabledID: %s. dyad's partnerID: %s" % (str(dyadDisabledID), str(dyadPartnerID)));
                             # Close the web socket; on_close() will do cleanup:
                             try:
-                                self.write_message('showMsg:You and your partner are out of sync. Please: both refresh your Web page with the Reload button.');
+                                self.write_message('showMsg' + OP_CODE_SEPARATOR + 'You and your partner are out of sync. Please: both refresh your Web page with the Reload button.');
                                 self.close();
                             except Exception as e:
                                 self.log("Handler found dead as we try to write 'dyadComplete', then exception when trying to notify *this* player: " + `e`);
@@ -658,7 +800,7 @@ class EchoTreeLogService(WebSocketHandler):
                 # Register this new dyad under both names so that we can find it:
                 ExperimentDyad.allDyads[thisEmail].append(newDyad);
                 ExperimentDyad.allDyads[thatEmail].append(newDyad);
-                self.write_message("waitForPlayer:" + thatEmail);
+                self.write_message("waitForPlayer" + OP_CODE_SEPARATOR + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
             except KeyError:
@@ -668,11 +810,11 @@ class EchoTreeLogService(WebSocketHandler):
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
                 # Select an exerimental condition:
-                initialCondition = EchoTreeLogService.decideNewPlayersCondition();
+                initialCondition = EchoTreeLogService.decideNewPlayersCondition(thisEmail, thatEmail);
                 newDyad.setCondition(initialCondition);
                 ExperimentDyad.allDyads[thisEmail] = [newDyad];
                 ExperimentDyad.allDyads[thatEmail] = [newDyad];
-                self.write_message("waitForPlayer:" + thatEmail);
+                self.write_message("waitForPlayer" + OP_CODE_SEPARATOR + thatEmail);
                 EchoTreeLogService.log("Dyad created and waiting: %s/%s" % (thisEmail, thatEmail));
                 return;
 
@@ -698,32 +840,38 @@ class EchoTreeLogService(WebSocketHandler):
         if parID is None:
             return None;
         topicPlusPar = EchoTreeLogService.paragraphs[parID];
-        # Each par starts with a topic keyward, followed by '|' as
+        # Each par starts with a topic keyward, followed by <ARGS_SEPARATOR> as
         # a separator. Get both:
-        topicPlusParArr = topicPlusPar.split('|');
+        topicPlusParArr = topicPlusPar.split(ARGS_SEPARATOR);
         topicKeyword = topicPlusParArr[0];
         # *******  The 1 can cause an IndexError. Deal with that.
         par = topicPlusParArr[1];
-        dyad.getDisabledHandler().write_message('newPar:' + str(parID) + '|' + par);
-        dyad.getPartnerHandler().write_message('newPar:' + topicKeyword);
+        dyad.getDisabledHandler().write_message('newPar' + OP_CODE_SEPARATOR + str(parID) + ARGS_SEPARATOR + par);
+        dyad.getPartnerHandler().write_message('newPar' + OP_CODE_SEPARATOR + topicKeyword);
         return parID;
 
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
         # Get both participant's permanent record, if they exist:
         with EchoTreeLogService.participantRecordLock:
-            participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
             try:
-                contactingParticipant = participantDict[contactingEmail];
-            except KeyError:
-                contactingParticipant = Participant(contactingEmail);
-                participantDict[contactingEmail] = contactingParticipant;
-            try:
-                friendParticipant =  participantDict[friendEmail];
-            except KeyError:
-                friendParticipant = Participant(friendEmail);
+                participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
+    
+                try:
+                    contactingParticipant = participantDict[contactingPlayerEmail];
+                except KeyError:
+                    contactingParticipant = Participant(contactingPlayerEmail);
+                contactingParticipant.addPlaymate(friendEmail);
+                participantDict[contactingPlayerEmail] = contactingParticipant;
+    
+                try:
+                    friendParticipant =  participantDict[friendEmail];
+                except KeyError:
+                    friendParticipant = Participant(friendEmail);
+                friendParticipant.addPlaymate(contactingPlayerEmail);
                 participantDict[friendEmail] = friendParticipant;
-            participantDict.close();
+            finally:
+                participantDict.close();
         
         with EchoTreeLogService.dyadLock:
             try:
@@ -733,18 +881,45 @@ class EchoTreeLogService(WebSocketHandler):
                 # by player's previous roles, or random choice:
                 newRole = contactingParticipant.nextRole();
                 return newRole;
+            numPlaysAsDisabled = 0;
+            numPlaysAsPartner  = 0;
             for dyad in newPlayersDyads:
+                if dyad.disabledID == contactingPlayerEmail:
+                    numPlaysAsDisabled += 1;
+                else:
+                    numPlaysAsPartner += 1;
+                # Check this player's open dyads (the ones waiting for login):
                 if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
                     # Dyad was opened for a friend of the new player. So the
                     # new player must get the opposite role:
                     return Role.PARTNER;
                 elif (not dyad.isDyadLoggedIn() and (dyad.partnerID() == friendEmail)):
                     return Role.DISABLED;
+                
+                # Check this player's dyads from former games:
+                if (dyad.isDyadCompleted() and dyad.partnerID == friendEmail):
+                    # These two people played before. Switch their roles:
+                    if dyad.disabledID == contactingPlayerEmail:
+                        return Role.PARTNER;
+                    else:
+                        return Role.DISABLED;
+                    
+            # Player has played before, but never with this partner. We
+            # could minimize the number of times a role was played across
+            # *both* players. We instead go simple, and minimize for the
+            # contacting player only:
+            newRole = Role.DISABLED if min(numPlaysAsDisabled, numPlaysAsPartner) == numPlaysAsDisabled else Role.PARTNER;
+            return newRole;
+            
+            
     
     @staticmethod
-    def decideNewPlayersCondition():
+    def decideNewPlayersCondition(thisEmail, thatEmail):
         initialCondition = None;
         with EchoTreeLogService.participantRecordLock:
+            # Find an experimental condition (googleNgrams, dmozRecreation, etc.),
+            # that spreads exposure across players. Retrieve
+            # persistent participant dict:
             participantDict = shelve.open(PARTICIPANT_RECORDS_PATH);
             try:
                 thisParticipant = participantDict[thisEmail];
@@ -756,11 +931,14 @@ class EchoTreeLogService(WebSocketHandler):
             except KeyError:
                 thatParticipant = Participant(thatEmail);
                 participantDict[thatEmail] = thatParticipant;
+                
+            # Given the two participants, find the new condition to use:
             initialCondition = thisParticipant.nextCondition(thatParticipant);
+            
             # Need to update the shelf dict with the modified entries:
             participantDict[thisEmail] = thisParticipant;
             participantDict[thatEmail] = thatParticipant;
-            PARTICIPANT_RECORDS_PATH.close();
+            participantDict.close();
         return initialCondition;
                             
     @staticmethod
@@ -1053,7 +1231,7 @@ if __name__ == '__main__':
             for i,par in enumerate(pars):
                 newPar = pars[i].replace('\n', ' ');
                 # Syntax check:
-                if len(newPar.split('|')) != 2:
+                if len(newPar.split(ARGS_SEPARATOR)) != 2:
                     # Bad entry in paragraphs.txt:
                     continue;
                 legalParEntries.append(newPar);
@@ -1073,7 +1251,7 @@ if __name__ == '__main__':
         # Add the CSV header to the output file:
         with open(gameOutputFilePath, 'w') as fd:
             fd.write("Disabled,Partner,Condition,");
-            for i in range(NUM_OF_PARS_PER_SESSION):
+            for i in range(NUM_OF_PARS_PER_ROUND):
                 if i == 0:
                     fd.write('ParID_' + str(i) + ',StartTime_' + str(i) + ',StopTime_' + str(i) + ',GoodnessClicks_' + str(i) + ',NumLettersTyped_' + str(i) + ',ChangeLog_' + str(i));
                 else:
