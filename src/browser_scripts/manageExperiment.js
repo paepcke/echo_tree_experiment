@@ -213,17 +213,18 @@ function ExperimentManager () {
 	    this.showMsg("Please start on the new sentence in the top orange box.");
 	    break;
 	case "newAssignment":
-	    // Get ownEmail|otherEmail|URLToLoad. Stupidly,
-	    //
+	    // Get ownEmail|otherEmail|URLToLoad|userInstructions
+
 	    var rest = cmdArr.shift();
 	    var restFrags = rest.split('|');
-	    var ownEmail    = restFrags.shift();
-	    var otherEmail  = restFrags.shift();
-	    var URLToLoad   = restFrags.shift();
+	    var ownEmail     = restFrags.shift();
+	    var otherEmail   = restFrags.shift();
+	    var URLToLoad    = restFrags.shift();
+	    var instructions = restFrags.shift();
 	    // Remember the emails to save them across the impending load
 	    // of the disabled.html or partner.html page (20 days expiration):
-	    setCookie("echoTreeOwnEmail", ownEmail, 20);
-	    setCookie("echoTreeOtherEmail", otherEmail, 20);
+	    //****?setCookie("echoTreeOwnEmail", ownEmail, 20);
+	    //****?setCookie("echoTreeOtherEmail", otherEmail, 20);
 
 	    if (whoami === 'disabledRole') {
 		whoami = 'partnerRole';
@@ -235,6 +236,12 @@ function ExperimentManager () {
 	    // loading the next page won't immediately close
 	    // the WebSocket:
 	    window.onunload = undefined;
+
+	    // Show the instructions to the user:
+	    this.showMsg(instructions);
+
+	    // Cleanly disconnect:
+	    wsExp.close();
 	    // Load the new UI (disabled or partner page):
 	    window.location.assign(URLToLoad);
 	    // Next the server will send some instructions to show.

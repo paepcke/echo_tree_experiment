@@ -642,42 +642,57 @@ class EchoTreeLogService(WebSocketHandler):
                 completedDyad.thatHandler.write_message("done" + OP_CODE_SEPARATOR);
                 completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
                 return;
+            else:
+                # Since we don't call decideNewPlayersRole() as we
+                # switch roles, we update the playmates for each player
+                # here:
+                otherParticipant = EchoTreeLogService.participantDict[self.myPartnersID];
+                # Record that this player will have played (again) with the given friend,
+                # and vice versa:
+                thisParticipant.addPlaymate(self.myPartnersID);
+                otherParticipant.addPlaymate(self.myPlayerID);
+                EchoTreeLogService.participantDict[self.myPlayerID] = thisParticipant;
+                EchoTreeLogService.participantDict[self.myPartnersID] = otherParticipant;
         
         # Get something like mono.stanford.edu:5004, or localhost:5004:
         hostPlusPort = self.request.host;
         host = hostPlusPort.split(':')[0];
+        myInstructions = otherInstructions = "Now the two of you will switch roles: ";                
         if self.myRole == Role.DISABLED:
+            myNewRole = Role.PARTNER;
+            otherOldRole = Role.PARTNER
+            otherNewRole = Role.DISABLED
             myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
             otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
+            myInstructions += PARTNER_INSTRUCTIONS;
+            otherInstructions += DISABLED_INSTRUCTIONS;
         else:
+            myNewRole = Role.DISABLED;
+            otherOldRole = Role.DISABLED
+            otherNewRole = Role.PARTNER
             myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
             otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
-        myMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + myUrlToLoad
-        otherMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + otherUrlToLoad
-        
+            myInstructions += DISABLED_INSTRUCTIONS;
+            otherInstructions += PARTNER_INSTRUCTIONS;
+
+        myMsg = "newAssignment" + OP_CODE_SEPARATOR +\
+                 self.myPlayerID + ARGS_SEPARATOR +\
+                 self.myPartnersID + ARGS_SEPARATOR +\
+                 myUrlToLoad + ARGS_SEPARATOR +\
+                 myInstructions
+        otherMsg = "newAssignment" + OP_CODE_SEPARATOR +\
+                    self.myPartnersID + ARGS_SEPARATOR +\
+                    self.myPlayerID + ARGS_SEPARATOR +\
+                    otherUrlToLoad + ARGS_SEPARATOR +\
+                    otherInstructions
+
+        # Send the proper newAssignment command to the right players:        
         if completedDyad.thatHandler == self:
             otherHandler = completedDyad.thisHandler;
         else:
             otherHandler = completedDyad.thatHandler;  
         otherHandler.write_message(otherMsg);
         self.write_message(myMsg);
-        
-        if self.myRole == Role.DISABLED:
-            myNewRole = Role.PARTNER
-            otherNewRole = Role.DISABLED;
-            otherOldRole = Role.PARTNER;
-        else:
-            myNewRole = Role.DISABLED;
-            otherNewRole = Role.PARTNER;
-            otherOldRole = Role.DISABLED;
-            
-        instructions = "showMsg" + OP_CODE_SEPARATOR + "Now the two of you will switch roles: ";
-        if myNewRole == Role.PARTNER:
-            instructions += PARTNER_INSTRUCTIONS;
-            self.write_message(instructions);
-        else:
-            instructions += DISABLED_INSTRUCTIONS;
-            otherHandler.write_message(instructions);
         
         EchoTreeLogService.log("Game switched. %s (was %s) is now %s; %s (was %s) is now %s" % 
                                (self.myPlayerID, self.myRole, myNewRole, self.myPartnersID, otherOldRole, otherNewRole));
