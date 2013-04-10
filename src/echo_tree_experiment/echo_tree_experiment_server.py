@@ -139,6 +139,7 @@ class Participant(object):
     
     def __init__(self, participantID):
         self.creationtime = time.time();
+        self.participantID = participantID
         # List of roles participant played (disabled/partner).
         # List is not unique:
         self.roles = [];
@@ -149,14 +150,29 @@ class Participant(object):
         # Sentences this participant has seen:
         self.seenPars = [];
 
+    def getParticipantID(self):
+        return self.participantID;
+    
     def addRole(self, role):
         self.roles.append(role);
+
+    def getRoles(self):
+        return self.roles;
         
     def addCondition(self, condition):
         self.conditions.append(condition);
+
+    def getConditions(self):
+        return self.conditions;
         
     def addPlaymate(self, mateID):
         self.playmates.append(mateID);
+
+    def getPlaymates(self):
+        return self.playmates;
+
+    def setPlaymates(self, mateIDList):
+        self.playmates = mateIDList;
         
     def playedWith(self, theMateID):
         '''
@@ -537,7 +553,7 @@ class EchoTreeLogService(WebSocketHandler):
         with EchoTreeLogService.currentEchoTreeLock:
             # Deliver the current tree to the subscribing browser:
             try:
-                self.write_message("test");
+                self.write_message("test" + OP_CODE_SEPARATOR);
                 self.selfTest.append('sentMsgToPartner');
             except Exception as e:
                 EchoTreeLogService.log("Error during opening test with %s (%s) during initial subscription: %s" % (self.request.host, self.request.remote_ip, `e`));
@@ -621,10 +637,10 @@ class EchoTreeLogService(WebSocketHandler):
             numPlayed = thisParticipant.playedWith(self.myPartnersID);
             if numPlayed >= 2:
                 # Experiment done:
-                completedDyad.thisHandler.write_message("done");
-                completedDyad.thisHandler.write_message("pleaseClose");
-                completedDyad.thatHandler.write_message("done");
-                completedDyad.thatHandler.write_message("pleaseClose");
+                completedDyad.thisHandler.write_message("done" + OP_CODE_SEPARATOR);
+                completedDyad.thisHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
+                completedDyad.thatHandler.write_message("done" + OP_CODE_SEPARATOR);
+                completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
                 return;
         
         # Get something like mono.stanford.edu:5004, or localhost:5004:
@@ -639,8 +655,12 @@ class EchoTreeLogService(WebSocketHandler):
         myMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + myUrlToLoad
         otherMsg = "newAssignment" + OP_CODE_SEPARATOR + self.myPartnersID + ARGS_SEPARATOR + self.myPlayerID + ARGS_SEPARATOR + otherUrlToLoad
         
-        completedDyad.thatHandler.write_message(otherMsg);
-        completedDyad.thisHandler.write_message(myMsg);
+        if completedDyad.thatHandler == self:
+            otherHandler = completedDyad.thisHandler;
+        else:
+            otherHandler = completedDyad.thatHandler;  
+        otherHandler.write_message(otherMsg);
+        self.write_message(myMsg);
         
         if self.myRole == Role.DISABLED:
             myNewRole = Role.PARTNER
@@ -654,10 +674,10 @@ class EchoTreeLogService(WebSocketHandler):
         instructions = "showMsg" + OP_CODE_SEPARATOR + "Now the two of you will switch roles: ";
         if myNewRole == Role.PARTNER:
             instructions += PARTNER_INSTRUCTIONS;
-            completedDyad.thisHandler.write_message(instructions);
+            self.write_message(instructions);
         else:
             instructions += DISABLED_INSTRUCTIONS;
-            completedDyad.thatHandler.write_message(instructions);
+            otherHandler.write_message(instructions);
         
         EchoTreeLogService.log("Game switched. %s (was %s) is now %s; %s (was %s) is now %s" % 
                                (self.myPlayerID, self.myRole, myNewRole, self.myPartnersID, otherOldRole, otherNewRole));
@@ -752,11 +772,11 @@ class EchoTreeLogService(WebSocketHandler):
         self.myPartnersID = thatEmail;
         self.myRole       = role;
         
-        # Check whether these two players played together more than once:
+        # Check whether these two players played together more than twice:
         with LoadedParticipants():
             thisParticipant = EchoTreeLogService.participantDict[self.myPlayerID];
             numPlayed = thisParticipant.playedWith(self.myPartnersID);
-            if numPlayed >= 2:
+            if numPlayed > 2:
                 msg = "The two of you have already played two games together. The experiment " +\
                       "is designed to have each pair play two games. If you are trying again because " +\
                       "earlier attempts failed for technical reasons, then please log in again adding " +\
@@ -879,21 +899,17 @@ class EchoTreeLogService(WebSocketHandler):
 
     @staticmethod
     def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
-        # Get both participant's permanent record, if they exist:
+        # Get or create contacting player's participant's permanent record::
         with LoadedParticipants():
             try:
                 contactingParticipant = EchoTreeLogService.participantDict[contactingPlayerEmail];
             except KeyError:
                 contactingParticipant = Participant(contactingPlayerEmail);
+            # Record that this player will have played once with the given friend.
+            # When the friend comes through here, the friend will similarly
+            # have the contacting player recorded as a former playmate:
             contactingParticipant.addPlaymate(friendEmail);
             EchoTreeLogService.participantDict[contactingPlayerEmail] = contactingParticipant;
-
-            try:
-                friendParticipant =  EchoTreeLogService.participantDict[friendEmail];
-            except KeyError:
-                friendParticipant = Participant(friendEmail);
-            friendParticipant.addPlaymate(contactingPlayerEmail);
-            EchoTreeLogService.participantDict[friendEmail] = friendParticipant;
         
         with EchoTreeLogService.dyadLock:
             try:
@@ -994,7 +1010,7 @@ class EchoTreeLogService(WebSocketHandler):
                 playerDyadChain.remove(dyad);
                 try:
                     #dyad.getThatHandler().sendMsgToBrowser('Your opposite player disconnected from the game. Ask him/her to refresh their Web page.');
-                    dyad.getThatHandler().write_message("pleaseClose:the other player closed its connection to the server. Please sign in again."); 
+                    dyad.getThatHandler().write_message("pleaseClose" + OP_CODE_SEPARATOR + "The other player closed its connection to the server. Please sign in again."); 
                 except AttributeError:
                     # Recovering, so be tolerant of an uninitialized thatHander in the dyad:
                     pass;
