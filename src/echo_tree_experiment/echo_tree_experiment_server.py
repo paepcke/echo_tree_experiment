@@ -634,68 +634,88 @@ class EchoTreeLogService(WebSocketHandler):
         # their experiment to be complete?
         with LoadedParticipants():
             thisParticipant = EchoTreeLogService.participantDict[self.myPlayerID];
-            numPlayed = thisParticipant.playedWith(self.myPartnersID);
-            if numPlayed >= 2:
-                # Experiment done:
-                completedDyad.thisHandler.write_message("done" + OP_CODE_SEPARATOR);
-                completedDyad.thisHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
-                completedDyad.thatHandler.write_message("done" + OP_CODE_SEPARATOR);
-                completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
-                return;
-            else:
-                # Since we don't call decideNewPlayersRole() as we
-                # switch roles, we update the playmates for each player
-                # here:
-                otherParticipant = EchoTreeLogService.participantDict[self.myPartnersID];
-                # Record that this player will have played (again) with the given friend,
-                # and vice versa:
-                thisParticipant.addPlaymate(self.myPartnersID);
-                otherParticipant.addPlaymate(self.myPlayerID);
-                EchoTreeLogService.participantDict[self.myPlayerID] = thisParticipant;
-                EchoTreeLogService.participantDict[self.myPartnersID] = otherParticipant;
-        
-        # Get something like mono.stanford.edu:5004, or localhost:5004:
-        hostPlusPort = self.request.host;
-        host = hostPlusPort.split(':')[0];
-        myInstructions = otherInstructions = "Now the two of you will switch roles: ";                
+            
+        numPlayed = thisParticipant.playedWith(self.myPartnersID);
+        if numPlayed >= 2:
+            # Experiment done:
+            completedDyad.thisHandler.write_message("done" + OP_CODE_SEPARATOR);
+            completedDyad.thisHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
+            completedDyad.thatHandler.write_message("done" + OP_CODE_SEPARATOR);
+            completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
+            return;
+
+        myInstructions = otherInstructions = "Now the two of you will switch roles: ";
         if self.myRole == Role.DISABLED:
-            myNewRole = Role.PARTNER;
-            otherOldRole = Role.PARTNER
-            otherNewRole = Role.DISABLED
-            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
-            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
             myInstructions += PARTNER_INSTRUCTIONS;
             otherInstructions += DISABLED_INSTRUCTIONS;
         else:
-            myNewRole = Role.DISABLED;
-            otherOldRole = Role.DISABLED
-            otherNewRole = Role.PARTNER
-            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
-            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
             myInstructions += DISABLED_INSTRUCTIONS;
             otherInstructions += PARTNER_INSTRUCTIONS;
-
-        myMsg = "newAssignment" + OP_CODE_SEPARATOR +\
-                 self.myPlayerID + ARGS_SEPARATOR +\
-                 self.myPartnersID + ARGS_SEPARATOR +\
-                 myUrlToLoad + ARGS_SEPARATOR +\
-                 myInstructions
-        otherMsg = "newAssignment" + OP_CODE_SEPARATOR +\
-                    self.myPartnersID + ARGS_SEPARATOR +\
-                    self.myPlayerID + ARGS_SEPARATOR +\
-                    otherUrlToLoad + ARGS_SEPARATOR +\
-                    otherInstructions
-
+            
         # Send the proper newAssignment command to the right players:        
         if completedDyad.thatHandler == self:
             otherHandler = completedDyad.thisHandler;
         else:
-            otherHandler = completedDyad.thatHandler;  
+            otherHandler = completedDyad.thatHandler;
+            
+        myMsg    = "pleaseClose" + OP_CODE_SEPARATOR + myInstructions;
+        otherMsg = "pleaseClose" + OP_CODE_SEPARATOR + otherInstructions;
         otherHandler.write_message(otherMsg);
         self.write_message(myMsg);
-        
-        EchoTreeLogService.log("Game switched. %s (was %s) is now %s; %s (was %s) is now %s" % 
-                               (self.myPlayerID, self.myRole, myNewRole, self.myPartnersID, otherOldRole, otherNewRole));
+                    
+#                # Since we don't call decideNewPlayersRole() as we
+#                # switch roles, we update the playmates for each player
+#                # here:
+#                otherParticipant = EchoTreeLogService.participantDict[self.myPartnersID];
+#                # Record that this player will have played (again) with the given friend,
+#                # and vice versa:
+#                thisParticipant.addPlaymate(self.myPartnersID);
+#                otherParticipant.addPlaymate(self.myPlayerID);
+#                EchoTreeLogService.participantDict[self.myPlayerID] = thisParticipant;
+#                EchoTreeLogService.participantDict[self.myPartnersID] = otherParticipant;
+#        
+#        # Get something like mono.stanford.edu:5004, or localhost:5004:
+#        hostPlusPort = self.request.host;
+#        host = hostPlusPort.split(':')[0];
+#        myInstructions = otherInstructions = "Now the two of you will switch roles: ";                
+#        if self.myRole == Role.DISABLED:
+#            myNewRole = Role.PARTNER;
+#            otherOldRole = Role.PARTNER
+#            otherNewRole = Role.DISABLED
+#            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
+#            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
+#            myInstructions += PARTNER_INSTRUCTIONS;
+#            otherInstructions += DISABLED_INSTRUCTIONS;
+#        else:
+#            myNewRole = Role.DISABLED;
+#            otherOldRole = Role.DISABLED
+#            otherNewRole = Role.PARTNER
+#            myUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "disabled.html";
+#            otherUrlToLoad = "http://" + host + ":" + str(ECHO_TREE_PAGE_SERVICE_PORT) + "/" + "partner.html";
+#            myInstructions += DISABLED_INSTRUCTIONS;
+#            otherInstructions += PARTNER_INSTRUCTIONS;
+#
+#        myMsg = "newAssignment" + OP_CODE_SEPARATOR +\
+#                 self.myPlayerID + ARGS_SEPARATOR +\
+#                 self.myPartnersID + ARGS_SEPARATOR +\
+#                 myUrlToLoad + ARGS_SEPARATOR +\
+#                 myInstructions
+#        otherMsg = "newAssignment" + OP_CODE_SEPARATOR +\
+#                    self.myPartnersID + ARGS_SEPARATOR +\
+#                    self.myPlayerID + ARGS_SEPARATOR +\
+#                    otherUrlToLoad + ARGS_SEPARATOR +\
+#                    otherInstructions
+#
+#        # Send the proper newAssignment command to the right players:        
+#        if completedDyad.thatHandler == self:
+#            otherHandler = completedDyad.thisHandler;
+#        else:
+#            otherHandler = completedDyad.thatHandler;  
+#        otherHandler.write_message(otherMsg);
+#        self.write_message(myMsg);
+#        
+#        EchoTreeLogService.log("Game switched. %s (was %s) is now %s; %s (was %s) is now %s" % 
+#                               (self.myPlayerID, self.myRole, myNewRole, self.myPartnersID, otherOldRole, otherNewRole));
         
     
     def on_close(self):
@@ -937,7 +957,7 @@ class EchoTreeLogService(WebSocketHandler):
             numPlaysAsDisabled = 0;
             numPlaysAsPartner  = 0;
             for dyad in newPlayersDyads:
-                if dyad.disabledID == contactingPlayerEmail:
+                if dyad.disabledID() == contactingPlayerEmail:
                     numPlaysAsDisabled += 1;
                 else:
                     numPlaysAsPartner += 1;
@@ -1029,6 +1049,10 @@ class EchoTreeLogService(WebSocketHandler):
                 except AttributeError:
                     # Recovering, so be tolerant of an uninitialized thatHander in the dyad:
                     pass;
+                except IOError:
+                    # Recovering, so be tolerant of stream to other partner already
+                    # being closed:
+                    pass
 
     @staticmethod
     def deleteDyad(dyad):
