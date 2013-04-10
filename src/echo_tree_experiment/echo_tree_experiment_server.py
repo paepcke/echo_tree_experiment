@@ -36,6 +36,7 @@ import datetime;
 import random;
 import copy;
 import shelve;
+import collections
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -86,12 +87,13 @@ PARAGRAPHS_PATH = os.path.join(SCRIPT_DIR, "Resources/paragraphs.txt");
 CSV_OUTPUT_DIR  = os.path.join(SCRIPT_DIR, "Measurements");
 PARTICIPANT_RECORDS_PATH = os.path.join(CSV_OUTPUT_DIR, "participants.shelve"); 
 
-DISABLED_INSTRUCTIONS = "Please begin typing the sentence shown in the top orange box. Your opposite player will try to guess. " +\
-                        "Click the 'Sentence is done' button when the guess captures the spirit of the sentence." +\
-                        "Click the That's close... button when a guess lets you skip some typing. Pick up typing where needed " +\
-                        "to complete the sentence, given what your opposite now guessed. Click this button also if you finish the entire sentence."
+DISABLED_INSTRUCTIONS = "Once you click the OK button, you will go back to the brown login screen. " +\
+                        "Once there, please log in again. Then begin typing the sentence that you will " +\
+                        "find in the top orange box. Your opposite player will try to guess."
 
-PARTNER_INSTRUCTIONS  = "As your opposite player types, you will see the emerging information. Please guess the emerging sentence over the phone."
+PARTNER_INSTRUCTIONS  = "Once you click the OK button, you will go back to the brown login screen. " +\
+                        "Once there, please log in again. As your opposite player types, you will see the " +\
+                        "emerging information. Please guess the emerging sentence over the phone."
 
 
 class Condition:
@@ -101,6 +103,19 @@ class Condition:
 class Role:
     DISABLED = 'disabledRole';
     PARTNER  = 'partnerRole';
+
+def least_common(array):
+    '''
+    Given an array, return the least common element, or None
+    if the array is empty. 
+    @param array:
+    @type array:
+    '''
+    if len(array) == 0:
+        return None;
+    # For [1,1,3] the following returns [(1,2),(3,1)]
+    orderedElement_Count_Tuples = collections.Counter(array).most_common()
+    return orderedElement_Count_Tuples[-1][0];
 
 
 # -----------------------------------------  Classes Participant --------------------
@@ -126,6 +141,12 @@ class LoadedParticipants:
     def __exit__(self, type, value, traceback):
         EchoTreeLogService.participantDict.close();
         EchoTreeLogService.participantRecordLock.release();
+        
+class PlayContact(object):
+    def __init__(self, playmateID, rolePlayed, condition):
+        self.playmateID = playmateID
+        self.rolePlayed = rolePlayed
+        self.condition = condition
 
 class Participant(object):
     '''
@@ -140,39 +161,118 @@ class Participant(object):
     def __init__(self, participantID):
         self.creationtime = time.time();
         self.participantID = participantID
-        # List of roles participant played (disabled/partner).
-        # List is not unique:
-        self.roles = [];
-        # Conditions participants operated under:
-        self.conditions = [];
-        # Partners this participant played with:
-        self.playmates = [];
-        # Sentences this participant has seen:
+        
+        # Array of basic info on games participant played: 
+        self.playContacts = [];  
         self.seenPars = [];
+        
+    def __iter__():
+        '''
+        Iterator that feeds out playmate IDs of past playmates:
+        @return: this participant instance
+        @rtype: Participant
+        '''
+        self.latestIndexIntoPlayContacts = -1;
+        return self;
+         
+    def next(self):
+        '''
+        the required next() method for the playmate ID iterator.
+        @return: ID of one playmate with whom this participant has played in the past.
+        @rtype: string 
+        '''
+        self.latestIndexIntoPlayContacts += 1;
+        if self.latestIndexIntoPlayContacts >= len(self.playContacts):
+            raise StopIteration;
+        return self.playContacts[self.latestIndexIntoPlayContacts].playmateID;
 
     def getParticipantID(self):
         return self.participantID;
     
-    def addRole(self, role):
-        self.roles.append(role);
-
-    def getRoles(self):
-        return self.roles;
-        
-    def addCondition(self, condition):
-        self.conditions.append(condition);
-
-    def getConditions(self):
-        return self.conditions;
-        
-    def addPlaymate(self, mateID):
-        self.playmates.append(mateID);
+    def addContact(self, playmateID, thisParticipantsRole, condition):
+        '''
+        Add a new player contact to this participant. NOTE the caller
+        MUST set the shelve entry for this participant to be
+        this participant, b/c shelves don't update disk when
+        objects are mutated.
+        @param playmateID:
+        @type playmateID:
+        @param thisParticipantsRole:
+        @type thisParticipantsRole:
+        @param condition:
+        @type condition:
+        '''
+        newContact = PlayContact(playmateID, thisParticipantsRole, condition);
+        self.playContacts.append(newContact);
 
     def getPlaymates(self):
-        return self.playmates;
+        '''
+        Return an array with all IDs of playmates this participant has played with.
+        NOTE: you can also use the playmate iterator: for playmate in participant:... 
+        @return: IDs of past playmates.
+        @rtype: [string] 
+        '''
+        return [contact.playmateID for contact in self.playContacts];
+    
+    def getConditions(self):
+        '''
+        Return an array with all the experimental conditions under which
+        this player has played in the past.
+        @return: experimental conditions in past games
+        @rtype: [string] 
+        '''
+        return [contact.condition for contact in self.playContacts];
 
-    def setPlaymates(self, mateIDList):
-        self.playmates = mateIDList;
+    def getRoles(self):
+        '''
+        Return an array with all the roles this participant
+        has played in the past
+        @return: roles played in past games
+        @rtype: [string] 
+        '''
+        return [contact.rolePlayed for contact in self.playContacts];
+    
+    def getRoleByPlaymate(self, playmateID):
+        '''
+        Given a playmateID, return an array of all roles this participant
+        played with the given playmate
+        @param playmateID: ID of past playmate
+        @type playmateID: [string]
+        @return: all roles played with the given playmate
+        @rtype: [string]
+        '''
+        res = [];
+        for contact in self.playContacts:
+            if contact.playmateID == playmateID:
+                res.append(contact.rolePlayed);
+        return res;
+
+    def getConditionByPlaymate(self, playmateID):
+        '''
+        Given a playmateID, return an array of all experimental conditions this participant
+        played under with the given playmate
+        @param playmateID: ID of past playmate
+        @type playmateID: [string]
+        @return: all conditions under which participant played with the given playmate
+        @rtype: [string]
+        '''
+        res = [];
+        for contact in self.playContacts:
+            if contact.playmateID == playmateID:
+                res.append(contact.condition);
+        return res;
+        
+#    def addRole(self, role):
+#        self.roles.append(role);
+#
+#    def addCondition(self, condition):
+#        self.conditions.append(condition);
+#
+#    def addPlaymate(self, mateID):
+#        self.playmates.append(mateID);
+#
+#    def setPlaymates(self, mateIDList):
+#        self.playmates = mateIDList;
         
     def playedWith(self, theMateID):
         '''
@@ -185,7 +285,7 @@ class Participant(object):
         @rtype: int
         '''
         played = 0;
-        for mateID in self.playmates:
+        for mateID in self.getPlaymates():
             if mateID == theMateID:
                 played += 1;
         return played;
@@ -214,12 +314,12 @@ class Participant(object):
         role is random. Else, the role less frequently
         played is returned.
         '''
-        if len(self.roles) == 0:
+        allRoles = self.getRoles();
+        if len(allRoles) == 0:
             newRole = self.randomRole();
-            self.addRole(newRole)
             return newRole;
-        playedDisabled = self.roles.count(Role.DISABLED);
-        playedPartner  = self.roles.count(Role.PARTNER);
+        playedDisabled = allRoles.count(Role.DISABLED);
+        playedPartner  = allRoles.count(Role.PARTNER);
         return Role.DISABLED if min(playedDisabled, playedPartner) == playedDisabled else Role.PARTNER;
 
     def nextCondition(self, otherPlayerObj):
@@ -233,17 +333,15 @@ class Participant(object):
         '''
         # Get the list of all conditions either player
         # has played under:
-        allConditions = copy.copy(self.conditions);
-        allConditions.extend(otherPlayerObj.conditions);
+        allConditions = copy.copy(self.getConditions());
+        allConditions.extend(otherPlayerObj.getConditions());
         
         if len(allConditions) == 0:
             newCondition = self.randomCondition();
         else:
             googleNgramCount = allConditions.count(Condition.GOOGLE_NGRAMS);
             dmozRecreation   = allConditions.count(Condition.RECREATION_NGRAMS);
-            newCondition = Condition.GOOGLE_NGRAMS if min(googleNgramCount, dmozRecreation) == Condition.GOOGLE_NGRAMS else Condition.RECREATION_NGRAMS;
-        self.addCondition(newCondition);
-        otherPlayerObj.addCondition(newCondition);
+            newCondition = Condition.GOOGLE_NGRAMS if min(googleNgramCount, dmozRecreation) == googleNgramCount else Condition.RECREATION_NGRAMS;
         #************!!!!!!  Change when googleNgrams are available
         #return newCondition;
         return Condition.RECREATION_NGRAMS;
@@ -338,6 +436,14 @@ class ExperimentDyad(object):
         
     def setDyadCompleted(self):
         self.dyadCompleted = True;
+        
+    def isOpen(self):
+        '''
+        Returns True if this dyad is neither marked as Completed, nor as Logged in.
+        This type of dyad had one player log in, but not the second one yet.
+        '''
+        return not (self.isDyadCompleted() or self.isDyadLoggedIn());
+        
         
     def getThisHandler(self):
         return self.thisHandler;
@@ -577,7 +683,7 @@ class EchoTreeLogService(WebSocketHandler):
 
         # Is browser reporting the players' email addresses?
         # Format: login:role=disabledRole myEmail=disabledEmail otherEmail=partnerEmail
-        #    or : login:role=partnerFole myEmail=partnerEmail otherEmail=disabledEmail        
+        #    or : login:role=partnerRole myEmail=partnerEmail otherEmail=disabledEmail        
         if (msgArr[0] == 'login'):
             if (len(msgArr) < 2):
                 EchoTreeLogService.log('Bad setIDs message: no arg provided.');
@@ -639,9 +745,9 @@ class EchoTreeLogService(WebSocketHandler):
         if numPlayed >= 2:
             # Experiment done:
             completedDyad.thisHandler.write_message("done" + OP_CODE_SEPARATOR);
-            completedDyad.thisHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
+            completedDyad.thisHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR + "You can close this browser tab now.");
             completedDyad.thatHandler.write_message("done" + OP_CODE_SEPARATOR);
-            completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR);
+            completedDyad.thatHandler.write_message("pleaseClose" + OP_CODE_SEPARATOR + "You can close this browser tab now.");
             return;
 
         myInstructions = otherInstructions = "Now the two of you will switch roles: ";
@@ -652,7 +758,8 @@ class EchoTreeLogService(WebSocketHandler):
             myInstructions += DISABLED_INSTRUCTIONS;
             otherInstructions += PARTNER_INSTRUCTIONS;
             
-        # Send the proper newAssignment command to the right players:        
+        # Send the pleaseClose request to browser, adding the 
+        # proper  explanatory message for each player:
         if completedDyad.thatHandler == self:
             otherHandler = completedDyad.thisHandler;
         else:
@@ -892,7 +999,8 @@ class EchoTreeLogService(WebSocketHandler):
                 newDyad = ExperimentDyad(self, role, disabledEmail, partnerEmail);
                 self.myDyad = newDyad;
                 # Select an exerimental condition:
-                initialCondition = EchoTreeLogService.decideNewPlayersCondition(thisEmail, thatEmail);
+                initialCondition = least_common(thisParticipant.getConditionByPlaymate(thatEmail));
+                assert(initialCondition is not None);
                 newDyad.setCondition(initialCondition);
                 ExperimentDyad.allDyads[thisEmail] = [newDyad];
                 ExperimentDyad.allDyads[thatEmail] = [newDyad];
@@ -933,86 +1041,55 @@ class EchoTreeLogService(WebSocketHandler):
         return parID;
 
     @staticmethod
-    def decideNewPlayersRole(contactingPlayerEmail, friendEmail):
+    def decideNewPlayersRoleAndCondition(contactingPlayerEmail, friendEmail):
+        
         # Get or create contacting player's participant's permanent record::
         with LoadedParticipants():
             try:
-                contactingParticipant = EchoTreeLogService.participantDict[contactingPlayerEmail];
-            except KeyError:
-                contactingParticipant = Participant(contactingPlayerEmail);
-            # Record that this player will have played once with the given friend.
-            # When the friend comes through here, the friend will similarly
-            # have the contacting player recorded as a former playmate:
-            contactingParticipant.addPlaymate(friendEmail);
-            EchoTreeLogService.participantDict[contactingPlayerEmail] = contactingParticipant;
-        
-        with EchoTreeLogService.dyadLock:
-            try:
-                newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
-            except KeyError:
-                # No existing dyad yet; nextRole() will make pick
-                # by player's previous roles, or random choice:
-                newRole = contactingParticipant.nextRole();
-                return newRole;
-            numPlaysAsDisabled = 0;
-            numPlaysAsPartner  = 0;
-            for dyad in newPlayersDyads:
-                if dyad.disabledID() == contactingPlayerEmail:
-                    numPlaysAsDisabled += 1;
-                else:
-                    numPlaysAsPartner += 1;
-                # Check this player's open dyads (the ones waiting for login):
-                if (not dyad.isDyadLoggedIn() and (dyad.disabledID() == friendEmail)):
-                    # Dyad was opened for a friend of the new player. So the
-                    # new player must get the opposite role:
-                    return Role.PARTNER;
-                elif (not dyad.isDyadLoggedIn() and (dyad.partnerID() == friendEmail)):
-                    return Role.DISABLED;
-                
-                # Check this player's dyads from former games:
-                if (dyad.isDyadCompleted() and dyad.partnerID == friendEmail):
-                    # These two people played before. Switch their roles:
-                    if dyad.disabledID == contactingPlayerEmail:
-                        return Role.PARTNER;
-                    else:
-                        return Role.DISABLED;
-                    
-            # Player has played before, but never with this partner. We
-            # could minimize the number of times a role was played across
-            # *both* players. We instead go simple, and minimize for the
-            # contacting player only:
-            newRole = Role.DISABLED if min(numPlaysAsDisabled, numPlaysAsPartner) == numPlaysAsDisabled else Role.PARTNER;
-            return newRole;
-            
-            
-    
-    @staticmethod
-    def decideNewPlayersCondition(thisEmail, thatEmail):
-        initialCondition = None;
-        with LoadedParticipants():
-            # Find an experimental condition (googleNgrams, dmozRecreation, etc.),
-            # that spreads exposure across players. Retrieve
-            # persistent participant dict:
-            try:
-                thisParticipant = EchoTreeLogService.participantDict[thisEmail];
-            except KeyError:
-                thisParticipant = Participant(thisEmail);
-                EchoTreeLogService.participantDict[thisEmail] = thisParticipant;
-            try:
-                thatParticipant =  EchoTreeLogService.participantDict[thatEmail];
-            except KeyError:
-                thatParticipant = Participant(thatEmail);
-                EchoTreeLogService.participantDict[thatEmail] = thatParticipant;
-                
-            # Given the two participants, find the new condition to use:
-            initialCondition = thisParticipant.nextCondition(thatParticipant);
-            
-            # Need to update the shelf dict with the modified entries:
-            EchoTreeLogService.participantDict[thisEmail] = thisParticipant;
-            EchoTreeLogService.participantDict[thatEmail] = thatParticipant;
+                try:
+                    contactingParticipant = EchoTreeLogService.participantDict[contactingPlayerEmail];
+                except KeyError:
+                    contactingParticipant = Participant(contactingPlayerEmail);
 
-        return initialCondition;
-                            
+                try:
+                    friendParticipant = EchoTreeLogService.participantDict[friendEmail];
+                except KeyError:
+                    friendParticipant = Participant(friendEmail);
+                    
+                # If there is an open dyad which this participant will make complete,
+                # then the role and conditions to play are completely constrained
+                # by what the player who logged in first was assigned as role and
+                # condition: 
+                with EchoTreeLogService.dyadLock:
+                    try:
+                        newPlayersDyads = ExperimentDyad.allDyads[contactingPlayerEmail];
+                    except KeyError:
+                        newPlayersDyads = [];
+                    for dyad in newPlayersDyads:
+                        # Check this player's open dyads (the ones waiting for login):
+                        if (dyad.isOpen() and (dyad.disabledID() == friendEmail)):
+                            # Dyad was opened for a friend of the new player. So the
+                            # new player must get the opposite role:
+                            newRole      = Role.PARTNER;
+                            newCondition = dyad.condition(); 
+                            return (newRole, newCondition);
+                        elif (dyad.isOpen()  and (dyad.partnerID() == friendEmail)):
+                            newRole = Role.DISABLED;
+                            newCondition = dyad.condition();
+                            return (newRole, newCondition); 
+        
+                    # No open dyad. 
+                    # Find whether contacting player has played with this
+                    # friend before:
+                    newRole      = contactingParticipant.nextRole();
+                    newCondition = contactingParticipant.nextCondition(friendParticipant);
+                    return(newRole, newCondition);
+
+            finally:
+                contactingParticipant.addContact(friendEmail, newRole, newCondition);
+                EchoTreeLogService.participantDict[contactingPlayerEmail] = contactingParticipant;
+                
+    
     @staticmethod
     def deletePlayer(playerID):
         with EchoTreeLogService.dyadLock:
@@ -1148,7 +1225,7 @@ class EchoTreeExperimentPageRequestHandler(HTTPServer):
             # Get this type of struct: dict: {'ownEmail': ['me@google.com'], 'otherEmail': ['you@google.com']}
             emailInfoDict = urlparse.parse_qs(urlQuery);
             try:
-                roleToAssign = EchoTreeLogService.decideNewPlayersRole(emailInfoDict['ownEmail'][0], emailInfoDict['otherEmail'][0]);
+                (roleToAssign,condition) = EchoTreeLogService.decideNewPlayersRoleAndCondition(emailInfoDict['ownEmail'][0], emailInfoDict['otherEmail'][0]);
             except KeyError:
                 EchoTreeLogService.log("Initial contact does not provide emails. Dict is: %s" % str(emailInfoDict));
                 return;
