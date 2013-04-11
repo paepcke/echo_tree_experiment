@@ -5,6 +5,7 @@ import echo_tree_experiment_server
 from echo_tree_experiment_server import EchoTreeLogService
 from echo_tree_experiment_server import LoadedParticipants
 from echo_tree_experiment_server import Participant
+from echo_tree_experiment_server import PlayContact
 
 if __name__ == '__main__':
     
@@ -17,7 +18,7 @@ if __name__ == '__main__':
         for playerID in sys.argv[1:]:
             try:
                 participant = EchoTreeLogService.participantDict[playerID];
-                participant.setPlaymates([]);
+                participant.playContacts = [];
                 EchoTreeLogService.participantDict[playerID] = participant;
                 numClearedMateLists += 1;
             except KeyError:

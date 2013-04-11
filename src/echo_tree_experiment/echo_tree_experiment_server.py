@@ -143,6 +143,15 @@ class LoadedParticipants:
         EchoTreeLogService.participantRecordLock.release();
         
 class PlayContact(object):
+    '''
+    Instances represent one play contact. Each PlayContact is
+    owned by one Participant instance. The playmateID is the ID
+    of the player that the owning participant played with. The
+    rolePlayed is the role that the owning participant played
+    during that contact (Role.DISABLED, or Role.PARTNER). The
+    condition is the experimental condition in force during the
+    play.
+    '''
     def __init__(self, playmateID, rolePlayed, condition):
         self.playmateID = playmateID
         self.rolePlayed = rolePlayed
@@ -262,17 +271,74 @@ class Participant(object):
                 res.append(contact.condition);
         return res;
         
-#    def addRole(self, role):
-#        self.roles.append(role);
-#
-#    def addCondition(self, condition):
-#        self.conditions.append(condition);
-#
-#    def addPlaymate(self, mateID):
-#        self.playmates.append(mateID);
-#
-#    def setPlaymates(self, mateIDList):
-#        self.playmates = mateIDList;
+    def deleteContactsByPlaymateID(self, playmateID):
+        '''
+        Given a playmate ID, remove from this participant all contacts
+        that record games with that playmate. 
+        
+        NOTE: callers are responsible
+        for calling this method inside a 'with LoadedParticipants()' block,
+        and to re-assign this participant to the EchoTreeLogService.participantDict.
+        That's because shelves don't update the disk as objects are mutated.
+         
+        @param playmateID:
+        @type playmateID:
+        @return: number of deleted contacts
+        @rtype: int
+        '''
+        contacts = copy.copy(self.playContacts);
+        numDeleted = 0;
+        for contact in contacts:
+            if contact.playmateID == playmateID:
+                self.playContacts.remove(contact);
+                numDeleted += 1;
+        return numDeleted;
+        
+    def deleteContactsByRole(self, role):
+        '''
+        Given a role, remove from this participant all contacts
+        in which (s)he played that role.
+        
+        NOTE: callers are responsible
+        for calling this method inside a 'with LoadedParticipants()' block,
+        and to re-assign this participant to the EchoTreeLogService.participantDict.
+        That's because shelves don't update the disk as objects are mutated.
+         
+        @param role:
+        @type role:
+        @return: number of deleted contacts
+        @rtype: int
+        '''
+        contacts = copy.copy(self.playContacts);
+        numDeleted = 0;
+        for contact in contacts:
+            if contact.rolePlayed == role:
+                self.playContacts.remove(contact);
+                numDeleted += 1;
+        return numDeleted;
+
+    def deleteContactsByCondition(self, condition):
+        '''
+        Given a condition, remove from this participant all contacts
+        in which (s)he played under that experimental condition.
+        
+        NOTE: callers are responsible
+        for calling this method inside a 'with LoadedParticipants()' block,
+        and to re-assign this participant to the EchoTreeLogService.participantDict.
+        That's because shelves don't update the disk as objects are mutated.
+         
+        @param condition:
+        @type condition:
+        @return: number of deleted contacts
+        @rtype: int
+        '''
+        contacts = copy.copy(self.playContacts);
+        numDeleted = 0;
+        for contact in contacts:
+            if contact.condition == condition:
+                self.playContacts.remove(contact);
+                numDeleted += 1;
+        return numDeleted;
         
     def playedWith(self, theMateID):
         '''

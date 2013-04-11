@@ -5,6 +5,7 @@ import echo_tree_experiment_server
 from echo_tree_experiment_server import EchoTreeLogService
 from echo_tree_experiment_server import LoadedParticipants
 from echo_tree_experiment_server import Participant
+from echo_tree_experiment_server import PlayContact
 
 if __name__ == '__main__':
     

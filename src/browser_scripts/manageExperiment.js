@@ -205,9 +205,9 @@ function ExperimentManager () {
 		// This player is a partner, arg is topic keyword:
 		this.showMsg("The next paragraph will loosely be about " + parIDAndParStr[0] + "\n\n" +
 			     "Please try to guess as your game mate types. You may type individual words " +
-			     "in the text field, and build a visualization to explore conversation possibilities.\n\n" +
+			     "in the text field at the top, and build a visualization to explore conversation possibilities.\n\n" +
 			     "But whenever your game mate completes a word, your visualization will update to " +
-			     "reflect the new word."
+			     "reflect the new word.");
 
 		return;
 	    }
@@ -215,14 +215,15 @@ function ExperimentManager () {
 	    this.currParID = parIDAndParStr[0];
 	    // Show the new text to be entered:
 	    document.getElementById("taskText").value= parIDAndParStr[1];
-	    this.showMsg("Please start typing the new sentence in the top orange box." +
+	    this.showMsg("Please start typing the new sentence that is shown in the orange " +
+			 "box at the top into the text field at the bottom." +
 			 "Click the \"Sentence is Done\" button when your partner's guess " +
-			 "about what you are trying to say captures the spirit of the entire sentence. " +\
-			 "Click this button also if you finish typing the entire sentence.\n\n" +\
-			 "If you see a useful word in the visualization, please click on that word, and it " +\
-			 "will be transferred into the text field where you are typing.\n\n"
-                         "Click the \"That's Close...\" button when a guess lets you skip some typing. Pick up " +\
-			 "typing where needed to complete the sentence, given what your opposite guessed. "
+			 "about what you are trying to say captures the spirit of the entire sentence. " +
+			 "Click this button also if you finish typing the entire sentence.\n\n" +
+			 "If you see a useful word in the visualization, please click on that word, and it " +
+			 "will be transferred into the text field where you are typing. You thereby minimize your work.\n\n" +
+                         "Click the \"That's Close...\" button when a guess lets you skip some typing. Pick up " +
+			 "typing where needed to complete the sentence, given what your opposite guessed. ");
                          
 	    break;
 	case "newAssignment":

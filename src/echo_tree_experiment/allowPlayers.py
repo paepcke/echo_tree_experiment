@@ -5,6 +5,7 @@ import echo_tree_experiment_server
 from echo_tree_experiment_server import EchoTreeLogService
 from echo_tree_experiment_server import LoadedParticipants
 from echo_tree_experiment_server import Participant
+from echo_tree_experiment_server import PlayContact
 
 if __name__ == '__main__':
     
@@ -27,21 +28,16 @@ if __name__ == '__main__':
             print("Player ID '%s' does not exist." % player2)
             sys.exit(1)
            
-        player1OrigMates = participant1.getPlaymates();
-        purgedPlaymatesPlayer1 = [value for value in player1OrigMates if value != player2];
-        
-        player2OrigMates = participant2.getPlaymates();
-        purgedPlaymatesPlayer2 = [value for value in player2OrigMates if value != player1];
-
-        participant1.setPlaymates(purgedPlaymatesPlayer1);
-        participant2.setPlaymates(purgedPlaymatesPlayer2);  
+        delFromP1 = participant1.deleteContactsByPlaymateID(player2);
+        delFromP2 = participant2.deleteContactsByPlaymateID(player1);
+           
         EchoTreeLogService.participantDict[player1] = participant1;
         EchoTreeLogService.participantDict[player2] = participant2;
 
     print("Deleted %d occurrences of %s in %s. Deleted %d occurrences of %s in %s." %
-          (len(player1OrigMates) - len(purgedPlaymatesPlayer1),
+          (delFromP1,
            player2,
            player1,
-           len(player2OrigMates) - len(purgedPlaymatesPlayer2),
+           delFromP2,
            player1,
            player2));

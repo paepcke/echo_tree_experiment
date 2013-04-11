@@ -19,13 +19,13 @@ div.application {
     border:2px solid;
     border-radius:25px;
     background-color:Coral;
-    margin:30px;
+    margin:5px;
 }
 
 textarea {
     background-color:Chocolate;
     width:500px;
-    margin:30px;
+    margin: 10px;
     align-horizontal:center;
 }
 
@@ -38,8 +38,8 @@ button.bigButton {
     width:80px;
     background-color:Chocolate;
     color:Cornsilk;
-    padding:10px 10px 5px 5px;
-    margin:20px;
+    padding:0px 10px 5px 5px;
+    margin:5px;
 }
 button.scary {
     background-color:Black;
@@ -56,5 +56,5 @@ input.twoLines {
     height:30px;
     width:500px;
     background-color:Chocolate;
-    margin:30px;
+    margin:10px;
 }

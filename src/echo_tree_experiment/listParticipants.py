@@ -6,12 +6,14 @@ import echo_tree_experiment_server
 from echo_tree_experiment_server import EchoTreeLogService
 from echo_tree_experiment_server import LoadedParticipants
 from echo_tree_experiment_server import Participant
+from echo_tree_experiment_server import PlayContact
 
 
 def listParticipantDetails(participant):
-    print("\tRoles played: %s" % str(participant.getRoles()))
-    print("\tConditions  : %s" % str(participant.getConditions()))
-    print("\tPlaymates   : %s" % str(participant.getPlaymates()))
+    for contact in participant.playContacts:
+        print("\tGame with: %s" % str(contact.playmateID));
+        print("\t\tParticipant %s had role %s." % (str(participant.getParticipantID()), str(contact.rolePlayed)));
+        print("\t\tExperimental condition: %s." % str(contact.condition));
 
 if __name__ == '__main__':
     
@@ -41,4 +43,3 @@ if __name__ == '__main__':
                     listParticipantDetails(participant);
             except KeyError:
                 print("Player ID '%s' does not exist. Continuing." % playerID)
-    print("Done.")
