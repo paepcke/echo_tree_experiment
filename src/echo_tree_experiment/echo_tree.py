@@ -154,7 +154,7 @@ class WordExplorer(object):
         Return a Python WordTree structure in which the
         followWordObjs are sorted by decreasing frequency. This
         method is recursive, and is the main purpose of this class.
-        @param wordArr: root word for the new WordTree. For the first call,
+        @param wordArr: root word(s) for the new WordTree. For the first call,
                         which will start the recursion, this parm is a single
                         word. For all calls from recursion, this parm is an
                         array of strings: the words that follow. The array is
@@ -209,6 +209,22 @@ class WordExplorer(object):
                 if len(newSubtree) > 0:
                     wordTree['followWordObjs'].append(newSubtree);
                     if maxDepth == arity:
+                        followingBigramRoots = self.getSortedFollowers(followerWords[-1], ARITY.BIGRAM);
+                        terminalBigramSubtrees = []
+                        # Example newSubtree at this point: 
+                        # OrderedDict([('word', u'in'), ('followWordObjs', [u'jack'])])
+                        # Get the terminal word: jack in this instance:
+                        oldTerminal = newSubtree['followWordObjs'][0];
+                        # oldTerminal is now u'jack' in this example
+                        
+                        
+                        # Build a node for each of the maxBranch follow-words to 'jack': 
+                        for bigramTerminal in followingBigramRoots[0:maxBranch]:
+                            newEntry = OrderedDict({'word': oldTerminal, 
+                                                    'followWordObjs': [OrderedDict({'word': bigramTerminal, 'followWordObjs': []})]});
+                            terminalBigramSubtrees.append(newEntry);
+                        newSubtree['followWordObjs'] = terminalBigramSubtrees;
+                        wordTree['followWordObjs'] = [newSubtree];
                         break
         return wordTree;
     
@@ -229,12 +245,12 @@ class WordExplorer(object):
             # New ngram:
             currentStr = [];
         currentStr.append(rootWord);
-        if len(currentStr) >= treeDepth:
-            print ' '.join(currentStr);
-            # Keep the root word, clear the rest of this 
-            # now finished ngram:
-            currentStr = currentStr[0:currDepth];
-            return currentStr;
+#        if len(currentStr) >= currDepth:
+#            print ' '.join(currentStr);
+#            # Keep the root word, clear the rest of this 
+#            # now finished ngram:
+#            currentStr = currentStr[0:currDepth];
+#            return currentStr;
         for wordNode in followers:
             if isinstance(wordNode,str) or isinstance(wordNode,unicode):
                 currentStr.append(wordNode);
@@ -246,6 +262,7 @@ class WordExplorer(object):
                     return currentStr;
             else:
                 currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr, currDepth=currDepth+1);
+        print ' '.join(currentStr);
         return currentStr[0:currDepth];
         
 # ----------------------------   Testing   ----------------
