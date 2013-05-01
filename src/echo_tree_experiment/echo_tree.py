@@ -187,8 +187,14 @@ class WordExplorer(object):
         else:
             # We combine all n words into one string,
             # and recursively create a follower tree for the last word:
-            wordTree['word'] = ' '.join(wordArr);
-        wordTree['followWordObjs'] = []
+            #*****???wordTree['word'] = ' '.join(wordArr);
+            wordTree['word'] = wordArr[0];
+        wordTree['followWordObjs'] = wordArr[1:];
+        
+        # Tree already as deep as it should be: root word plus all the follow words:
+        if 1 + len(wordTree['followWordObjs']) >= maxDepth:
+            return wordTree
+        # No, not deep enough. Compute another ngram from the last word:
         for i,followerWords in enumerate(self.getSortedFollowers(wordArr[-1], arity)):
             # followerWords is now in the form: (word1,word2,word3,..), with
             # the number of words depending on the ngram arity. Bigrams: length 1,
@@ -201,7 +207,10 @@ class WordExplorer(object):
             newSubtree = self.makeWordTree(followerWords, arity, wordTree=followerTree, maxDepth=maxDepth-1);
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
-                wordTree['followWordObjs'].append(newSubtree);
+                listValue = list(wordTree['followWordObjs'])
+                listValue.append(newSubtree);
+                newTupleVal = tuple(listValue);
+                wordTree['followWordObjs'] = newTupleVal;
         return wordTree;
     
     def makeJSONTree(self, wordTree):
@@ -214,15 +223,27 @@ class WordExplorer(object):
         return json.dumps(wordTree);
       
    
-    def printWordTree(self, wordTree, currentStr=""):
+    def printWordTree(self, wordTree, treeDepth, currentStr=[]):
         rootWord = wordTree['word'];
         followers = wordTree['followWordObjs'];
-        currentStr += ' ' + rootWord;
-        if len(followers) == 0:
-            print currentStr;
-            return;
+        currentStr.append(rootWord);
+        if len(currentStr) >= treeDepth:
+            print ' '.join(currentStr);
+            # Keep the root word, clear the rest of this 
+            # now finished ngram:
+            currentStr = currentStr[0:1];
+            return currentStr;
         for wordNode in followers:
-            self.printWordTree(wordNode, currentStr=currentStr.split()[0]);
+            if isinstance(wordNode,str) or isinstance(wordNode,unicode):
+                currentStr.append(wordNode);
+                if len(currentStr) >= treeDepth:
+                    print ' '.join(currentStr);
+                    # Keep the root word, clear the rest of this 
+                    # now finished ngram:
+                    currentStr = currentStr[0:1];
+                    return currentStr;
+            else:
+                currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr);
         
         
 # ----------------------------   Testing   ----------------
@@ -244,12 +265,17 @@ if __name__ == "__main__":
 #    jsonTree = explorer.makeJSONTree(explorer.makeWordTree('reliability', ARITY.BIGRAM));
 #    print jsonTree;
     
-    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
+#    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 3);
+#    print jsonTree;
+    
+    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
     print str(wordTree)
     jsonTree = explorer.makeJSONTree(wordTree);
-    explorer.printWordTree(wordTree);
+    explorer.printWordTree(wordTree, 3);
     print jsonTree;
-    
     
     exit();
     
