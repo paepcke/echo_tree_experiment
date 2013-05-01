@@ -213,10 +213,10 @@ class WordExplorer(object):
                     # Example newSubtree at this point: 
                     # OrderedDict([('word', u'in'), ('followWordObjs', [u'jack'])])
                     # Get the terminal word: jack in this instance:
-                    oldTerminal = newSubtree['followWordObjs'][0];
-                    # oldTerminal is now u'jack' in this example
-                    
-                    
+                    try:
+                        oldTerminal = newSubtree['followWordObjs'][0];
+                    except IndexError:
+                        continue;
                     # Build a node for each of the maxBranch follow-words to 'jack': 
                     for bigramTerminal in followingBigramRoots[0:maxBranch]:
                         # bigramTerminal is a singleton tuple. Atomize it:
@@ -244,24 +244,12 @@ class WordExplorer(object):
             # New ngram:
             currentStr = [];
         currentStr.append(rootWord);
-#        if len(currentStr) >= currDepth:
-#            print ' '.join(currentStr);
-#            # Keep the root word, clear the rest of this 
-#            # now finished ngram:
-#            currentStr = currentStr[0:currDepth];
-#            return currentStr;
         for wordNode in followers:
-            if isinstance(wordNode,str) or isinstance(wordNode,unicode):
-                currentStr.append(wordNode);
-                if len(currentStr) >= treeDepth:
-                    print ' '.join(currentStr);
-                    # Keep the root word, clear the rest of this 
-                    # now finished ngram:
-                    currentStr = currentStr[0:currDepth];
-                    return currentStr;
-            else:
-                currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr, currDepth=currDepth+1);
-        print ' '.join(currentStr);
+            currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr, currDepth=currDepth+1);
+        # If we climbed out of recursion, it's time to print
+        # what we collected:
+        if currDepth == treeDepth:
+            print ' '.join(currentStr);
         return currentStr[0:currDepth];
         
 # ----------------------------   Testing   ----------------
@@ -294,7 +282,7 @@ if __name__ == "__main__":
 #    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
 #    print str(wordTree)
 #    jsonTree = explorer.makeJSONTree(wordTree);
-#    explorer.printWordTree(wordTree, 3);
+#    explorer.printWordTree(wordTree, 2);
 #    print jsonTree;
     
     exit();
