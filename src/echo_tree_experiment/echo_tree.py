@@ -222,7 +222,7 @@ class WordExplorer(object):
         return json.dumps(wordTree);
       
    
-    def printWordTree(self, wordTree, treeDepth, currentStr=[]):
+    def printWordTree(self, wordTree, treeDepth, currentStr=[], currDepth=0):
         rootWord = wordTree['word'];
         followers = wordTree['followWordObjs'];
         if currentStr is None:
@@ -233,7 +233,7 @@ class WordExplorer(object):
             print ' '.join(currentStr);
             # Keep the root word, clear the rest of this 
             # now finished ngram:
-            currentStr = currentStr[0:1];
+            currentStr = currentStr[0:currDepth];
             return currentStr;
         for wordNode in followers:
             if isinstance(wordNode,str) or isinstance(wordNode,unicode):
@@ -242,11 +242,11 @@ class WordExplorer(object):
                     print ' '.join(currentStr);
                     # Keep the root word, clear the rest of this 
                     # now finished ngram:
-                    currentStr = currentStr[0:1];
+                    currentStr = currentStr[0:currDepth];
                     return currentStr;
             else:
-                currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr);
-        return currentStr;
+                currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr, currDepth=currDepth+1);
+        return currentStr[0:currDepth];
         
 # ----------------------------   Testing   ----------------
 
@@ -267,19 +267,19 @@ if __name__ == "__main__":
 #    jsonTree = explorer.makeJSONTree(explorer.makeWordTree('reliability', ARITY.BIGRAM));
 #    print jsonTree;
     
-#    explorer = WordExplorer(dbPath);    
-#    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
-#    print str(wordTree)
-#    jsonTree = explorer.makeJSONTree(wordTree);
-#    explorer.printWordTree(wordTree, 3);
-#    print jsonTree;
-    
-    explorer = WordExplorer(dbPath);
-    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
+    explorer = WordExplorer(dbPath);    
+    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
     print str(wordTree)
     jsonTree = explorer.makeJSONTree(wordTree);
     explorer.printWordTree(wordTree, 3);
     print jsonTree;
+    
+#    explorer = WordExplorer(dbPath);
+#    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 3);
+#    print jsonTree;
     
     exit();
     
