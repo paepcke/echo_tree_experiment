@@ -203,29 +203,28 @@ class WordExplorer(object):
                 return wordTree;
             # Each member of the followWordOjbs array is its own tree:
             followerTree = OrderedDict();
-            for successorWord in followerWords:
-                newSubtree = self.makeWordTree(followerWords, arity, wordTree=followerTree, maxDepth=maxDepth-1);
-                # Don't enter empty dictionaries into the array:
-                if len(newSubtree) > 0:
-                    wordTree['followWordObjs'].append(newSubtree);
-                    if maxDepth == arity:
-                        followingBigramRoots = self.getSortedFollowers(followerWords[-1], ARITY.BIGRAM);
-                        terminalBigramSubtrees = []
-                        # Example newSubtree at this point: 
-                        # OrderedDict([('word', u'in'), ('followWordObjs', [u'jack'])])
-                        # Get the terminal word: jack in this instance:
-                        oldTerminal = newSubtree['followWordObjs'][0];
-                        # oldTerminal is now u'jack' in this example
-                        
-                        
-                        # Build a node for each of the maxBranch follow-words to 'jack': 
-                        for bigramTerminal in followingBigramRoots[0:maxBranch]:
-                            newEntry = OrderedDict({'word': oldTerminal, 
-                                                    'followWordObjs': [OrderedDict({'word': bigramTerminal, 'followWordObjs': []})]});
-                            terminalBigramSubtrees.append(newEntry);
-                        newSubtree['followWordObjs'] = terminalBigramSubtrees;
-                        wordTree['followWordObjs'] = [newSubtree];
-                        break
+            newSubtree = self.makeWordTree(followerWords, arity, wordTree=followerTree, maxDepth=maxDepth-1);
+            # Don't enter empty dictionaries into the array:
+            if len(newSubtree) > 0:
+                wordTree['followWordObjs'].append(newSubtree);
+                if maxDepth == arity:
+                    followingBigramRoots = self.getSortedFollowers(followerWords[-1], ARITY.BIGRAM);
+                    terminalBigramSubtrees = []
+                    # Example newSubtree at this point: 
+                    # OrderedDict([('word', u'in'), ('followWordObjs', [u'jack'])])
+                    # Get the terminal word: jack in this instance:
+                    oldTerminal = newSubtree['followWordObjs'][0];
+                    # oldTerminal is now u'jack' in this example
+                    
+                    
+                    # Build a node for each of the maxBranch follow-words to 'jack': 
+                    for bigramTerminal in followingBigramRoots[0:maxBranch]:
+                        # bigramTerminal is a singleton tuple. Atomize it:
+                        bigramTerminal = bigramTerminal[0];
+                        newEntry = OrderedDict({'word': oldTerminal, 
+                                                'followWordObjs': [OrderedDict({'word': bigramTerminal, 'followWordObjs': []})]});
+                        terminalBigramSubtrees.append(newEntry);
+                    newSubtree['followWordObjs'] = terminalBigramSubtrees;
         return wordTree;
     
     def makeJSONTree(self, wordTree):
