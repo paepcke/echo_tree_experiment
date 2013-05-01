@@ -189,9 +189,11 @@ class WordExplorer(object):
             # and recursively create a follower tree for the last word:
             #*****???wordTree['word'] = ' '.join(wordArr);
             wordTree['word'] = wordArr[0];
-        wordTree['followWordObjs'] = wordArr[1:];
+        # wordArr is a tuple, the 'list' below turns it
+        # into an array, to which we can append:
+        wordTree['followWordObjs'] = list(wordArr[1:]);
         
-        # Tree already as deep as it should be: root word plus all the follow words:
+        # Tree already as deep as it should be?: root word plus all the follow words:
         if 1 + len(wordTree['followWordObjs']) >= maxDepth:
             return wordTree
         # No, not deep enough. Compute another ngram from the last word:
@@ -207,10 +209,9 @@ class WordExplorer(object):
             newSubtree = self.makeWordTree(followerWords, arity, wordTree=followerTree, maxDepth=maxDepth-1);
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
-                listValue = list(wordTree['followWordObjs'])
-                listValue.append(newSubtree);
-                newTupleVal = tuple(listValue);
-                wordTree['followWordObjs'] = newTupleVal;
+                wordTree['followWordObjs'].append(newSubtree);
+                if maxDepth == arity:    #****????
+                    return wordTree;
         return wordTree;
     
     def makeJSONTree(self, wordTree):
@@ -226,6 +227,9 @@ class WordExplorer(object):
     def printWordTree(self, wordTree, treeDepth, currentStr=[]):
         rootWord = wordTree['word'];
         followers = wordTree['followWordObjs'];
+        if currentStr is None:
+            # New ngram:
+            currentStr = [];
         currentStr.append(rootWord);
         if len(currentStr) >= treeDepth:
             print ' '.join(currentStr);
@@ -244,7 +248,7 @@ class WordExplorer(object):
                     return currentStr;
             else:
                 currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr);
-        
+        return currentStr;
         
 # ----------------------------   Testing   ----------------
 
@@ -265,17 +269,17 @@ if __name__ == "__main__":
 #    jsonTree = explorer.makeJSONTree(explorer.makeWordTree('reliability', ARITY.BIGRAM));
 #    print jsonTree;
     
-#    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
-#    print str(wordTree)
-#    jsonTree = explorer.makeJSONTree(wordTree);
-#    explorer.printWordTree(wordTree, 3);
-#    print jsonTree;
-    
-    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
+    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
     print str(wordTree)
     jsonTree = explorer.makeJSONTree(wordTree);
     explorer.printWordTree(wordTree, 3);
     print jsonTree;
+    
+#    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 3);
+#    print jsonTree;
     
     exit();
     
