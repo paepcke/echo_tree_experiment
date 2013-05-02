@@ -271,12 +271,20 @@ if __name__ == "__main__":
 #    jsonTree = explorer.makeJSONTree(explorer.makeWordTree('reliability', ARITY.BIGRAM));
 #    print jsonTree;
     
+#    explorer = WordExplorer(dbPath);    
+#    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 3);
+#    print jsonTree;
+
     explorer = WordExplorer(dbPath);    
-    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
+    wordTree = explorer.makeWordTree('secluded', ARITY.TRIGRAM);
     print str(wordTree)
     jsonTree = explorer.makeJSONTree(wordTree);
     explorer.printWordTree(wordTree, 3);
     print jsonTree;
+
     
 #    explorer = WordExplorer(dbPath);
 #    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
