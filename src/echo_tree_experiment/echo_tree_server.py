@@ -25,9 +25,12 @@ from tornado.websocket import WebSocketHandler;
 from tornado.httpserver import HTTPServer;
 
 from echo_tree import WordExplorer;
+from echo_tree import ARITY;
 
 HOST = socket.getfqdn();
 ECHO_TREE_GET_PORT = 5005;
+
+ARITY_SERVED = ARITY.TRIGRAM;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
@@ -456,7 +459,7 @@ class EchoTreeService(WebSocketHandler):
                     # Non-existing tree type passed in the container:
                     EchoTreeService.log("Non-existent tree type passed TreeComputer thread: " + str(treeContainerToProcess.treeType()));
                     continue;
-                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord()));
+                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED));
                 treeContainerToProcess.setCurrentTree(newJSONEchoTreeStr);
                 
                 # Place the new tree into the output queue for broadcasters to

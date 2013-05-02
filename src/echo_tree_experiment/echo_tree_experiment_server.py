@@ -239,6 +239,8 @@ class Participant(object):
         @return: roles played in past games
         @rtype: [string] 
         '''
+        if len(self.playContacts) == 0:
+            return [];
         return [contact.rolePlayed for contact in self.playContacts];
     
     def getRoleByPlaymate(self, playmateID):
