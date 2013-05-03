@@ -459,7 +459,8 @@ class EchoTreeService(WebSocketHandler):
                     # Non-existing tree type passed in the container:
                     EchoTreeService.log("Non-existent tree type passed TreeComputer thread: " + str(treeContainerToProcess.treeType()));
                     continue;
-                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED));
+                echoTree = properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED);
+                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(echoTree)
                 treeContainerToProcess.setCurrentTree(newJSONEchoTreeStr);
                 
                 # Place the new tree into the output queue for broadcasters to

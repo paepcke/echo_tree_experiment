@@ -149,7 +149,7 @@ class WordExplorer(object):
         return wordArr;
       
       
-    def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH):
+    def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH, bigramAtEnd=False):
         '''
         Return a Python WordTree structure in which the
         followWordObjs are sorted by decreasing frequency. This
@@ -207,7 +207,10 @@ class WordExplorer(object):
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
                 wordTree['followWordObjs'].append(newSubtree);
-                if maxDepth == arity:
+                # Have we reached bottom, meaning our tree now represent the entire ngram?
+                # If so, are we to add one last bigram at the end, based on the last
+                # of the ngram words?
+                if maxDepth == arity and bigramAtEnd:
                     followingBigramRoots = self.getSortedFollowers(followerWords[-1], ARITY.BIGRAM);
                     terminalBigramSubtrees = []
                     # Example newSubtree at this point: 
