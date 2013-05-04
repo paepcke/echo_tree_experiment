@@ -31,6 +31,7 @@ HOST = socket.getfqdn();
 ECHO_TREE_GET_PORT = 5005;
 
 ARITY_SERVED = ARITY.TRIGRAM;
+#ARITY_SERVED = ARITY.BIGRAM;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");

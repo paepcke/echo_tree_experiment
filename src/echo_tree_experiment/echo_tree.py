@@ -78,9 +78,9 @@ class WordFollower(object):
         # though the followingCount is declared as int:
         try:
             if self.arity == ARITY.BIGRAM:
-                self.cursor.execute('SELECT word2 from Bigrams where word1="%s" ORDER BY probability*1 desc;' % self.word);
+                self.cursor.execute('SELECT word2 from Bigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
             elif self.arity == ARITY.TRIGRAM:
-                self.cursor.execute('SELECT word2,word3 from Trigrams where word1="%s" ORDER BY probability*1 desc;' % self.word);
+                self.cursor.execute('SELECT word2,word3 from Trigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
             else:
                 raise ValueError("WordFollower for arity %d is not implemented." % self.arity);
         except sqlite3.OperationalError as e:
@@ -149,7 +149,7 @@ class WordExplorer(object):
         return wordArr;
       
       
-    def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH, bigramAtEnd=False):
+    def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH):
         '''
         Return a Python WordTree structure in which the
         followWordObjs are sorted by decreasing frequency. This
@@ -185,19 +185,28 @@ class WordExplorer(object):
             wordTree['word'] = wordArr;
             wordArr = [wordArr]
         else:
-            wordTree['word'] = wordArr[0];
+            # We either have ('foo') or (foo,bar)
+            if len(wordArr) == 1:
+                flattenedFirstTerm = wordArr[0];
+            else:
+                flattenedFirstTerm = ' '.join(wordArr)
+            wordTree['word'] = flattenedFirstTerm;
         # wordArr is a tuple, the 'list' below turns it
         # into an array, to which we can append:
-        wordTree['followWordObjs'] = list(wordArr[1:]);
+        wordTree['followWordObjs'] = [];
         
         # Tree already as deep as it should be?: root word plus all the follow words:
         if 1 + len(wordTree['followWordObjs']) >= maxDepth:
             return wordTree
         # No, not deep enough. Compute another ngram from the last word:
+        
         for i,followerWords in enumerate(self.getSortedFollowers(wordArr[-1], arity)):
-            # followerWords is now in the form: (word1,word2,word3,..), with
-            # the number of words depending on the ngram arity. Bigrams: length 1,
-            # trigrams, length 2, etc.
+            # followerWords is now in the form: (word1,word1.2), with
+            # the number of words in each depending on the ngram arity. Bigrams: length 1,
+            # trigrams, length 2, etc. for ngrams of order >2 we contract the whole ngram
+            # into one string, as if it were the follower in a bigram. The next follower
+            # is always computed on the last word.
+            
             # Curtail the tree breadth, i.e. number of follow words we pursue:
             if i >= maxBranch:
                 return wordTree;
@@ -207,27 +216,6 @@ class WordExplorer(object):
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
                 wordTree['followWordObjs'].append(newSubtree);
-                # Have we reached bottom, meaning our tree now represent the entire ngram?
-                # If so, are we to add one last bigram at the end, based on the last
-                # of the ngram words?
-                if maxDepth == arity and bigramAtEnd:
-                    followingBigramRoots = self.getSortedFollowers(followerWords[-1], ARITY.BIGRAM);
-                    terminalBigramSubtrees = []
-                    # Example newSubtree at this point: 
-                    # OrderedDict([('word', u'in'), ('followWordObjs', [u'jack'])])
-                    # Get the terminal word: jack in this instance:
-                    try:
-                        oldTerminal = newSubtree['followWordObjs'][0];
-                    except IndexError:
-                        continue;
-                    # Build a node for each of the maxBranch follow-words to 'jack': 
-                    for bigramTerminal in followingBigramRoots[0:maxBranch]:
-                        # bigramTerminal is a singleton tuple. Atomize it:
-                        bigramTerminal = bigramTerminal[0];
-                        newEntry = OrderedDict({'word': oldTerminal, 
-                                                'followWordObjs': [OrderedDict({'word': bigramTerminal, 'followWordObjs': []})]});
-                        terminalBigramSubtrees.append(newEntry);
-                    newSubtree['followWordObjs'] = terminalBigramSubtrees;
         return wordTree;
     
     def makeJSONTree(self, wordTree):
