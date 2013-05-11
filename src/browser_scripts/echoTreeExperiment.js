@@ -65,6 +65,7 @@ if(typeof(WebSocket)!=="undefined") {
 
     // Create a WebSocket connected back to the EchoTree server 
     // where this script came from:
+    //var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
     var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
 
     ws.onopen = function () {
