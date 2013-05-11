@@ -15,6 +15,10 @@ Python and JSON results.
 WORD_TREE_BREADTH = 5;
 WORD_TREE_DEPTH   = 3;
 
+class ARITY:
+    BIGRAM  = 2;
+    TRIGRAM = 3;
+
 # ------------------------------- class Word Database ---------------------
 class WordDatabase(object):
     '''
@@ -45,17 +49,21 @@ class WordFollower(object):
     exceptions. See Python contextmanager.
     '''
 
-    def __init__(self, db, word):
+    def __init__(self, db, word, arity):
         '''
         Provides a tuple generator, given a WordDatabase instance 
-        that accesses a word co-occurrence file, and a root word.
+        that accesses a word co-occurrence file, a root word, and the
+        ngram arity. The latter is needed to select the proper table.
         @param db: WordDatabase instance that wraps an SQLite co-occurrence file.
         @type db: WordDatabase
         @param word: Root word, whose follower words are to be found.
         @type word: string
+        @param arity: the 'n' in ngram. 2 for bigram, 3 for trigrams, etc.
+        @type arity: ARITY
         '''
         self.db   = db;
         self.word = word;
+        self.arity = arity;
         
     def __enter__(self):
         '''
@@ -67,9 +75,14 @@ class WordFollower(object):
         self.cursor = self.db.conn.cursor();
         # The *1 converts the followingCount value to an int. 
         # Necessary so that the ordering isn't alpha. This even
-        # thought the followingCount is declared as int:
+        # though the followingCount is declared as int:
         try:
-            self.cursor.execute('SELECT bigramWord2,bigramProbability from BiTrigrams where word1="%s" ORDER BY bigramProbability*1 desc;' % self.word);
+            if self.arity == ARITY.BIGRAM:
+                self.cursor.execute('SELECT word2 from Bigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
+            elif self.arity == ARITY.TRIGRAM:
+                self.cursor.execute('SELECT word2,word3 from Trigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
+            else:
+                raise ValueError("WordFollower for arity %d is not implemented." % self.arity);
         except sqlite3.OperationalError as e:
             raise ValueError("SELECT statement failed for word '%s' in database '%s': %s" % (self.word, self.db.dbPath, `e`));
             
@@ -111,7 +124,7 @@ class WordExplorer(object):
         self.cache = {};
         self.db = WordDatabase(dbPath);
 
-    def getSortedFollowers(self, word):
+    def getSortedFollowers(self, word, arity):
         '''
         Return an array of follow-words for the given root word.
         The array is sorted by decreasing frequency. A cache
@@ -120,35 +133,36 @@ class WordExplorer(object):
         After the first request, follow-ons will therefore be fast.   
         @param word: root word for the new WordTree.
         @type word: string
+        @param arity: the 'n' in ngram. 2 for bigram, 3 for trigram, etc.
+        @type arity: ARITY
         '''
 
         try:
-            frequencySortedWordArr = self.cache[word];
+            wordArr = self.cache[word];
         except KeyError:
             # Not cached yet:
             wordArr = []; 
-            with WordFollower(self.db, word) as followers:
+            with WordFollower(self.db, word, arity) as followers:
                 for followerWordPlusCount in followers:
                     wordArr.append(followerWordPlusCount);
-            # Sort array in place, using element 1 (the count) as
-            # sort key. Want largest count (most frequent follower) 
-            # first: (Commented b/c currently we have the SQL statement sort already):
-            #wordArr.sort(key=itemgetter(1), reverse=True);
-            #print wordArr;
-            frequencySortedWordArr = [];
-            for wordPlusCount in wordArr:
-                frequencySortedWordArr.append(wordPlusCount[0]);
-            self.cache[word] = frequencySortedWordArr;
-        return frequencySortedWordArr;
+            self.cache[word] = wordArr;
+        return wordArr;
       
       
-    def makeWordTree(self, word, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH):
+    def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH):
         '''
         Return a Python WordTree structure in which the
         followWordObjs are sorted by decreasing frequency. This
         method is recursive, and is the main purpose of this class.
-        @param word: root word for the new WordTree
-        @type word: string
+        @param wordArr: root word(s) for the new WordTree. For the first call,
+                        which will start the recursion, this parm is a single
+                        word. For all calls from recursion, this parm is an
+                        array of strings: the words that follow. The array is
+                        of len 1 for bigrams (only one follow-on word), 2 for
+                        trigrams, etc.
+        @type word: {string | [string]}
+        @param arity: the 'n' in ngram. 2 for bigram, 3 for trigram, etc.
+        @type arity: ARITY
         @param wordTree: Dictionary to use for one 'word'/'followWordObjs.
         @type wordTree: {}
         @param maxDepth: How deep the tree should grow, that is how far along a 
@@ -167,15 +181,38 @@ class WordExplorer(object):
         if wordTree is None:
             # Use OrderedDict so that conversions to JSON show the 'word' key first:
             wordTree = OrderedDict();
-        wordTree['word'] = word;
-        wordTree['followWordObjs'] = []
-        for i,followerWord in enumerate(self.getSortedFollowers(word)):
+            # First call; wordArr is allowed to be a string, rather than a strArray:
+            wordTree['word'] = wordArr;
+            wordArr = [wordArr]
+        else:
+            # We either have ('foo') or (foo,bar)
+            if len(wordArr) == 1:
+                flattenedFirstTerm = wordArr[0];
+            else:
+                flattenedFirstTerm = ' '.join(wordArr)
+            wordTree['word'] = flattenedFirstTerm;
+        # wordArr is a tuple, the 'list' below turns it
+        # into an array, to which we can append:
+        wordTree['followWordObjs'] = [];
+        
+        # Tree already as deep as it should be?: root word plus all the follow words:
+        if 1 + len(wordTree['followWordObjs']) >= maxDepth:
+            return wordTree
+        # No, not deep enough. Compute another ngram from the last word:
+        
+        for i,followerWords in enumerate(self.getSortedFollowers(wordArr[-1], arity)):
+            # followerWords is now in the form: (word1,word1.2), with
+            # the number of words in each depending on the ngram arity. Bigrams: length 1,
+            # trigrams, length 2, etc. for ngrams of order >2 we contract the whole ngram
+            # into one string, as if it were the follower in a bigram. The next follower
+            # is always computed on the last word.
+            
             # Curtail the tree breadth, i.e. number of follow words we pursue:
             if i >= maxBranch:
                 return wordTree;
             # Each member of the followWordOjbs array is its own tree:
             followerTree = OrderedDict();
-            newSubtree = self.makeWordTree(followerWord, followerTree, maxDepth-1);
+            newSubtree = self.makeWordTree(followerWords, arity, wordTree=followerTree, maxDepth=maxDepth-1);
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
                 wordTree['followWordObjs'].append(newSubtree);
@@ -190,7 +227,22 @@ class WordExplorer(object):
         '''
         return json.dumps(wordTree);
       
-                
+   
+    def printWordTree(self, wordTree, treeDepth, currentStr=[], currDepth=0):
+        rootWord = wordTree['word'];
+        followers = wordTree['followWordObjs'];
+        if currentStr is None:
+            # New ngram:
+            currentStr = [];
+        currentStr.append(rootWord);
+        for wordNode in followers:
+            currentStr = self.printWordTree(wordNode, treeDepth, currentStr=currentStr, currDepth=currDepth+1);
+        # If we climbed out of recursion, it's time to print
+        # what we collected:
+        if currDepth == treeDepth:
+            print ' '.join(currentStr);
+        return currentStr[0:currDepth];
+        
 # ----------------------------   Testing   ----------------
 
 if __name__ == "__main__":
@@ -207,10 +259,31 @@ if __name__ == "__main__":
     explorer = WordExplorer(dbPath);
     
     #print explorer.getSortedFollowers('my');
-    tree = explorer.makeWordTree('reliability');
-    jsonTree = explorer.makeJSONTree(tree);
-    print str(tree);
+#    jsonTree = explorer.makeJSONTree(explorer.makeWordTree('reliability', ARITY.BIGRAM));
+#    print jsonTree;
+    
+#    explorer = WordExplorer(dbPath);    
+#    wordTree = explorer.makeWordTree('reliability', ARITY.TRIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 3);
+#    print jsonTree;
+
+    explorer = WordExplorer(dbPath);    
+    wordTree = explorer.makeWordTree('secluded', ARITY.TRIGRAM);
+    print str(wordTree)
+    jsonTree = explorer.makeJSONTree(wordTree);
+    explorer.printWordTree(wordTree, 3);
     print jsonTree;
+
+    
+#    explorer = WordExplorer(dbPath);
+#    wordTree = explorer.makeWordTree('reliability', ARITY.BIGRAM);
+#    print str(wordTree)
+#    jsonTree = explorer.makeJSONTree(wordTree);
+#    explorer.printWordTree(wordTree, 2);
+#    print jsonTree;
+    
     exit();
     
 #    print explorer.getSortedFollowers('ant');

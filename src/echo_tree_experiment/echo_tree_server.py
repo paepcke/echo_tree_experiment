@@ -17,6 +17,7 @@ import datetime;
 import threading;
 import json;
 import Queue;
+from Queue import Empty;
 from threading import Event, Lock, Thread;
 
 import tornado;
@@ -25,25 +26,34 @@ from tornado.websocket import WebSocketHandler;
 from tornado.httpserver import HTTPServer;
 
 from echo_tree import WordExplorer;
+from echo_tree import ARITY;
 
 HOST = socket.getfqdn();
 ECHO_TREE_GET_PORT = 5005;
+
+ARITY_SERVED = ARITY.TRIGRAM;
+#ARITY_SERVED = ARITY.BIGRAM;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
 scriptDir = os.path.realpath(os.path.dirname(__file__)); 
 DBPATH_DMOZ_RECREATION = os.path.join(scriptDir, "Resources/dmozRecreation.db");
 DBPATH_GOOGLE = os.path.join(scriptDir, "Resources/google.db");
+DBPATH_HENRY_BLOG = os.path.join(scriptDir, "Resources/henryBlog.db");
 
 ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 
 # Name of script to serve on ECHO_TREE_SCRIPT_SERVER_PORT. 
 # Fixed script intended to subscribe to the EchoTree event server: 
-TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
+#*******TREE_EVENT_LISTEN_SCRIPT_NAME = "wordTreeListener.html";
+TREE_EVENT_LISTEN_SCRIPT_NAME = "standaloneTreeClient.html";
+
+BLOCK_QUEUE = True;
 
 class TreeTypes:
     RECREATION_NGRAMS = 'dmozRecreation';
     GOOGLE_NGRAMS     = 'googleNgrams';
+    HENRY_BLOG_NGRAMS = 'henryBlog';
 
 # -----------------------------------------  Class TreeContainer --------------------
 
@@ -266,7 +276,7 @@ class EchoTreeService(WebSocketHandler):
                 treeCreator = msgDict['treeCreator'];
                 treeType = msgDict['treeType'];
             except KeyError:
-                EchoTreeService.log("Ill-formed root word submission message from browser: " + encodedMsg);
+                EchoTreeService.log("Ill-formed subscribe message from browser: " + encodedMsg);
                 return;
             # In case we didn't know before: now we know the ID of
             # this handler's browser:
@@ -378,14 +388,20 @@ class EchoTreeService(WebSocketHandler):
             super(EchoTreeService.NewEchoTreeWaitThread, self).__init__();
             if EchoTreeService.NewEchoTreeWaitThread.singletonRunning:
                 raise RuntimeError("Only one NewEchoTreeWaitThread instance may run per process.");
+            self.keepRunning = True;
             EchoTreeService.NewEchoTreeWaitThread.singletonRunning = True;
             
             EchoTreeService.log("Starting NewEchoTreeWait thread: sends any newly computed EchoTrees to its the connected browser.");
         
         def run(self):
-            while 1:
-                # Hang on new-EchoTree event:
-                modifiedContainer = EchoTreeService.newEchoTreeQueue.get();
+            while self.keepRunning:
+                # Hang on new-EchoTree event for 1 second, then check whether 
+                # we are to stop:
+                try:
+                    modifiedContainer = EchoTreeService.newEchoTreeQueue.get(BLOCK_QUEUE, 1.0);
+                except Empty:
+                    # Timed out, check again for a second, unless stop() was called:
+                    continue;
                 with EchoTreeService.activeHandlersChangeLock:
                     # Deliver the new tree to the browser:
                     try:
@@ -404,7 +420,9 @@ class EchoTreeService(WebSocketHandler):
                             EchoTreeService.log("Error during send of new EchoTree to %s (%s): %s" % (handler.request.host, handler.request.remote_ip, `e`));
                         else:
                             EchoTreeService.log("Error during send of new EchoTree: %s" % `e`);
-                            
+            
+        def stop(self):
+            self.keepRunning = False;                
     
     @staticmethod
     def triggerTreeComputationAndDistrib(treeContainer, newRootWord):
@@ -456,7 +474,8 @@ class EchoTreeService(WebSocketHandler):
                     # Non-existing tree type passed in the container:
                     EchoTreeService.log("Non-existent tree type passed TreeComputer thread: " + str(treeContainerToProcess.treeType()));
                     continue;
-                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord()));
+                echoTree = properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED);
+                newJSONEchoTreeStr = properWordExplorer.makeJSONTree(echoTree)
                 treeContainerToProcess.setCurrentTree(newJSONEchoTreeStr);
                 
                 # Place the new tree into the output queue for broadcasters to
@@ -487,6 +506,7 @@ class EchoTreeScriptRequestHandler(HTTPServer):
         # this request is not frequent. 
         scriptPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../browser_scripts/" + TREE_EVENT_LISTEN_SCRIPT_NAME);
         # Create the response and the HTML page string:
+        
         reply =  "HTTP/1.1 200 OK\r\n" +\
                  "Content-type, text/html\r\n" +\
                  "Content-Length:%s\r\n" % os.path.getsize(scriptPath) +\
@@ -585,14 +605,17 @@ if __name__ == '__main__':
     # underlying ngram collection:
     TreeContainer.addTreeType("dmozRecreation", DBPATH_DMOZ_RECREATION);
     TreeContainer.addTreeType("google", DBPATH_GOOGLE);
+    TreeContainer.addTreeType("henryBlog", DBPATH_HENRY_BLOG);
     
     # Start thread that waits for new root words and computes the respective tree:
     EchoTreeService.log('Starting TreeComputer thread.');
-    EchoTreeService.TreeComputer().start();
+    treeComputer = EchoTreeService.TreeComputer();
+    treeComputer.start();
     
     # Start thread that waits for a newly computed tree,
     # and sends it to all subscribers:
-    EchoTreeService.NewEchoTreeWaitThread().start();
+    echoWaitThread = EchoTreeService.NewEchoTreeWaitThread();
+    echoWaitThread.start();
     
     
     EchoTreeService.log("Starting EchoTree distribution server at port %s: creates, and pushes new word trees to all subscribed clients." %
@@ -614,9 +637,8 @@ if __name__ == '__main__':
         EchoTreeService.log("Stopping EchoTree distribution server...");
         if ioLoop.running():
             ioLoop.stop();
-        EchoTreeService.NewEchoTreeWaitThread.stop();
-        EchoTreeService.TreeComputer.stop();
-#        treeComputerThread.stop();
+        echoWaitThread.stop();
+        treeComputer.stop();
         EchoTreeService.log("EchoTree distribution server stopped.");
         if EchoTreeService.logFD is not None:
             EchoTreeService.logFD.close();
