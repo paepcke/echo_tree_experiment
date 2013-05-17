@@ -28,11 +28,15 @@ from tornado.httpserver import HTTPServer;
 from echo_tree import WordExplorer;
 from echo_tree import ARITY;
 
+# The following port is only used if this echo tree server
+# runs by itself, outside the context of a user experiment:
+ECHO_TREE_SCRIPT_SERVER_PORT = 5000;
+
 HOST = socket.getfqdn();
 ECHO_TREE_GET_PORT = 5005;
 
-ARITY_SERVED = ARITY.TRIGRAM;
-#ARITY_SERVED = ARITY.BIGRAM;
+#ARITY_SERVED = ARITY.TRIGRAM;
+ARITY_SERVED = ARITY.BIGRAM;
 
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
@@ -40,6 +44,7 @@ scriptDir = os.path.realpath(os.path.dirname(__file__));
 DBPATH_DMOZ_RECREATION = os.path.join(scriptDir, "Resources/dmozRecreation.db");
 DBPATH_GOOGLE = os.path.join(scriptDir, "Resources/google.db");
 DBPATH_HENRY_BLOG = os.path.join(scriptDir, "Resources/henryBlog.db");
+DBPATH_FISHER_CONVERSATIONS = os.path.join(scriptDir, "Resources/fisherConversations.db");
 
 ECHO_TREE_SUBSCRIBE_PATH = "r/subscribe_to_echo_trees";
 
@@ -54,6 +59,20 @@ class TreeTypes:
     RECREATION_NGRAMS = 'dmozRecreation';
     GOOGLE_NGRAMS     = 'googleNgrams';
     HENRY_BLOG_NGRAMS = 'henryBlog';
+    FISHER_CONVERSATIONS = 'conversations';
+    allTypes = [
+                FISHER_CONVERSATIONS,
+                GOOGLE_NGRAMS,
+                HENRY_BLOG_NGRAMS,
+                RECREATION_NGRAMS
+                ]
+
+dbPathLookup = {
+                TreeTypes.RECREATION_NGRAMS    : DBPATH_DMOZ_RECREATION,
+                TreeTypes.HENRY_BLOG_NGRAMS    : DBPATH_HENRY_BLOG,
+                TreeTypes.GOOGLE_NGRAMS        : DBPATH_GOOGLE,
+                TreeTypes.FISHER_CONVERSATIONS : DBPATH_FISHER_CONVERSATIONS
+                }
 
 # -----------------------------------------  Class TreeContainer --------------------
 
@@ -234,6 +253,7 @@ class EchoTreeService(WebSocketHandler):
         @param message: message arriving from the browser
         @type message: string
         '''
+        global ARITY_SERVED;
         encodedMsg = message.encode('utf-8');
         msgDict = json.loads(encodedMsg);
         try:
@@ -253,6 +273,10 @@ class EchoTreeService(WebSocketHandler):
             # In case we didn't know before: now we know the ID of
             # this handler's browser:
             self.myID = submitter;
+
+            if treeType not in TreeTypes.allTypes:
+                EchoTreeService.log("Bad 'newRootWord' request from browser: database %s does not exist." % str(treeType));
+                return;
 
             # Does this submitter already have a container for its trees
             # of this type?
@@ -307,7 +331,32 @@ class EchoTreeService(WebSocketHandler):
                                                                                                                           str(treeCreator)));
                 return;
             container.addSubscriber(submitter, self);
-                
+
+        elif cmd == 'newArity':
+            newArity = msgDict['arity'];
+            if newArity == 'bigrams':
+                ARITY_SERVED = ARITY.BIGRAM;
+            elif newArity == 'trigrams':
+                ARITY_SERVED = ARITY.TRIGRAM;
+            else:
+                EchoTreeService.log("Ill-formed newArity message from browser: unknown arity " + str(encodedMsg));
+                return;
+            EchoTreeService.log("Switched ngram arity to " + msgDict['arity']);
+            return;
+        
+        elif cmd == 'newDb':
+            try:
+                newDbName = msgDict['dbName'];
+            except KeyError:
+                EchoTreeService.log("Ill-formed newDb message from browser: no 'dbName' entry in command message.");
+                return;
+            if not newDbName in dbPathLookup.keys():
+                EchoTreeService.log("Ill-formed newDb message from browser: unknown db type " + str(newDbName));
+                return;
+            DB_SERVED = dbPathLookup[newDbName];
+            EchoTreeService.log("Switched database to " + newDbName);
+            return
+                            
         else:
             EchoTreeService.log("Unsupported command %s in request %s." % (cmd, encodedMsg));
             return;
@@ -460,6 +509,7 @@ class EchoTreeService(WebSocketHandler):
             EchoTreeService.TreeComputer.keepRunning = False;
         
         def run(self):
+            global ARITY_SERVED;
             # Make one tree manufacturer for each tree type (i.e. for each
             # ngram database):
             for treeType in TreeContainer.treeTypeNames():
@@ -474,7 +524,12 @@ class EchoTreeService(WebSocketHandler):
                     # Non-existing tree type passed in the container:
                     EchoTreeService.log("Non-existent tree type passed TreeComputer thread: " + str(treeContainerToProcess.treeType()));
                     continue;
-                echoTree = properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED);
+                try:
+                    echoTree = properWordExplorer.makeWordTree(treeContainerToProcess.currentRootWord(), ARITY_SERVED);
+                except ValueError as e:
+                    # Most likely a database error:
+                    EchoTreeService.log("Error trying to create a word tree: " + `e`);
+                    
                 newJSONEchoTreeStr = properWordExplorer.makeJSONTree(echoTree)
                 treeContainerToProcess.setCurrentTree(newJSONEchoTreeStr);
                 
@@ -485,7 +540,19 @@ class EchoTreeService(WebSocketHandler):
         
 # --------------------  Request Handler Class for browsers requesting the JavaScript that knows to open an EchoTreeService connection ---------------
 
-class EchoTreeScriptRequestHandler(HTTPServer):
+#**********************
+#Remove
+##http server for webchat
+#class EchoTreeScriptRequestHandler(tornado.web.RequestHandler):
+#  def get(self):
+#    self.write("Hello, chatter! [GET]")
+#  def post(self):
+#    self.write("Hello, chatter! [POST]")
+
+#**********************
+
+#*****class EchoTreeScriptRequestHandler(HTTPServer):
+class EchoTreeScriptRequestHandler(tornado.web.RequestHandler):
     '''
     Web service serving a single JavaScript containing HTML page.
     That page contains instructions for requesting an event stream for
@@ -495,6 +562,9 @@ class EchoTreeScriptRequestHandler(HTTPServer):
 #    def _execute(self, transforms):
 #        pass;
 
+    def _execute(self, request):
+        EchoTreeScriptRequestHandler.handle_request(self.request);
+        
     @staticmethod
     def handle_request(request):
         '''
@@ -504,7 +574,7 @@ class EchoTreeScriptRequestHandler(HTTPServer):
         '''
         # Path to the HTML page we serve. Should probably just load that once, but
         # this request is not frequent. 
-        scriptPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../browser_scripts/" + TREE_EVENT_LISTEN_SCRIPT_NAME);
+        scriptPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../browser_scripts/static/" + TREE_EVENT_LISTEN_SCRIPT_NAME);
         # Create the response and the HTML page string:
         
         reply =  "HTTP/1.1 200 OK\r\n" +\
@@ -603,9 +673,13 @@ if __name__ == '__main__':
 
     # Create the different types of EchoTrees, each based on a different
     # underlying ngram collection:
-    TreeContainer.addTreeType("dmozRecreation", DBPATH_DMOZ_RECREATION);
-    TreeContainer.addTreeType("google", DBPATH_GOOGLE);
-    TreeContainer.addTreeType("henryBlog", DBPATH_HENRY_BLOG);
+    for treeTypeName in TreeTypes.allTypes:
+        TreeContainer.addTreeType(treeTypeName, dbPathLookup[treeTypeName]);
+        
+#*************
+#    TreeContainer.addTreeType("dmozRecreation", DBPATH_DMOZ_RECREATION);
+#    TreeContainer.addTreeType("google", DBPATH_GOOGLE);
+#    TreeContainer.addTreeType("henryBlog", DBPATH_HENRY_BLOG);
     
     # Start thread that waits for new root words and computes the respective tree:
     EchoTreeService.log('Starting TreeComputer thread.');
@@ -620,8 +694,18 @@ if __name__ == '__main__':
     
     EchoTreeService.log("Starting EchoTree distribution server at port %s: creates, and pushes new word trees to all subscribed clients." %
                          (str(ECHO_TREE_GET_PORT) + ":/subscribe_to_echo_trees"));
+                         
+    # The initial script that pulls in echoTreeExperiment.js and
+    # other files is at URL <host>:<ECHO_TREE_GET_PORT>/start
+    httpStaticFilesRoot = os.path.join(os.path.dirname(__file__), "../browser_scripts/static");
     application = tornado.web.Application([(r"/subscribe_to_echo_trees", EchoTreeService),
-                                           ]);
+                                           (r"/start", EchoTreeScriptRequestHandler),
+                                           (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": httpStaticFilesRoot}),
+                                           ],
+                                          debug = True,
+                                          static_path = httpStaticFilesRoot
+                                          );
+
                                            
     application.listen(ECHO_TREE_GET_PORT);
     try:

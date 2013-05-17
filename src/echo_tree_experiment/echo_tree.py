@@ -123,6 +123,9 @@ class WordExplorer(object):
         '''
         self.cache = {};
         self.db = WordDatabase(dbPath);
+        # Cache needs to be invalidated when we change arity,
+        # or when we change db (see getSortedFollowers(), and setDb()):
+        self.arityInCache = None
 
     def getSortedFollowers(self, word, arity):
         '''
@@ -135,9 +138,16 @@ class WordExplorer(object):
         @type word: string
         @param arity: the 'n' in ngram. 2 for bigram, 3 for trigram, etc.
         @type arity: ARITY
+        @raise ValueError: if language model database access fails  
         '''
 
         try:
+            if self.arityInCache is not None:
+                # Is arity in this call different than 
+                # the arity with which we built the cache?
+                if arity != self.arityInCache:
+                    self.cache = {};
+            self.arityInCache = arity;
             wordArr = self.cache[word];
         except KeyError:
             # Not cached yet:
@@ -147,7 +157,12 @@ class WordExplorer(object):
                     wordArr.append(followerWordPlusCount);
             self.cache[word] = wordArr;
         return wordArr;
-      
+
+
+    def setDb(self, newDbPath):
+        # New db invalidates our cache:
+        self.cache = {};
+        self.db = WordDatabase(newDbPath);
       
     def makeWordTree(self, wordArr, arity, wordTree=None, maxDepth=WORD_TREE_DEPTH, maxBranch=WORD_TREE_BREADTH):
         '''
@@ -174,6 +189,7 @@ class WordExplorer(object):
         @type maxBranch: int
         @return: new EchoTree Python structure
         @rtype: string
+        @raise ValueError: if language model database access fails  
         '''
         # Recursion bottomed out:
         if maxDepth <= 0:
@@ -216,6 +232,7 @@ class WordExplorer(object):
             # Don't enter empty dictionaries into the array:
             if len(newSubtree) > 0:
                 wordTree['followWordObjs'].append(newSubtree);
+                
         return wordTree;
     
     def makeJSONTree(self, wordTree):
@@ -249,7 +266,8 @@ if __name__ == "__main__":
     
     #dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
     #dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
-    dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/dmozRecreation.db");
+    #dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/dmozRecreation.db");
+    dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/henryBlog.db");
     
 #    db = WordDatabase(dbPath);
 #    with WordFollower(db, 'ant') as followers:
