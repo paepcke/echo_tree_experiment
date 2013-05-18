@@ -1,0 +1,18 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <script type="text/javascript" src="http://d3js.org/d3.v2.min.js?2.10.0"></script>
+    <script type="text/javascript" src="echoTreeExperiment.js"></script>
+  </head>
+  <body>
+    <div id=userMsg>
+     New word: <input type="text" name="newWord" id="newWord" 
+		      onkeydown="window.handleEnterInWordFld();" />
+
+     <button onclick="window.sendNewRootWordFromTxtFld();">Get New Tree</button>
+    </div>
+    <div id="echotree">
+    </div>    
+    <script type="text/javascript">main();</script>
+  </body>
+</html>
