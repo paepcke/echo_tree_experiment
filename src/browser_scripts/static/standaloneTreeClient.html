@@ -30,14 +30,27 @@
 
      <button onclick="window.sendNewRootWordFromTxtFld();">Get New Tree</button>
      <b>Ngram arity: </b>
-	<input type="radio" name="arity" checked="checked" value="Bigrams" onclick="sendNewArity('bigrams')">Bigrams
-	<input type="radio" name="arity" value="Trigrams" onclick="sendNewArity('trigrams')">Trigrams
+	<input type="radio" name="arity" id="arity" checked="checked" value="Bigrams" onclick="sendNewArity('bigrams')">Bigrams
+	<input type="radio" name="arity" id="arity" value="Trigrams" onclick="sendNewArity('trigrams')">Trigrams
 	<select name=dblist id=dblist onchange="setNewDefaultDb()">
 	  <option value="henryBlog">Henry's Blog</option>
 	  <option value="conversations">Conversations (Fisher 11k)</option>
 	  <option value="dmozRecreation">Recreation (Dmoz)</option>
 	  <option value="googleNgrams" disabled="1">Google 1T</option>
 	</select>
+
+	<b>Subscribe to:</b>
+	<select name=subscriptions id=subscriptions onchange="newSubscription()">
+	  <option value="<nobody>">Only your trees</option>
+	  <option value="henryBlog|Bigrams">All Henry blog bigrams</option>
+	  <option value="henryBlog|Trigrams">All Henry blog trigrams</option>
+	  <option value="dmozRecreation|Bigrams">All recreation (Dmoz) bigrams</option>
+	  <option value="dmozRecreation|Trigrams">All recreation (Dmoz) trigrams</option>
+	  <option value="conversations|Bigrams" disabled="1">All conversations (Fisher 11k) bigrams</option>
+	  <option value="conversations|Trigrams" disabled="1">All conversations (Fisher 11k) trigrams</option>
+	  <option value="googleNgrams" disabled="1">Google 1T</option>
+	</select>
+	
     </div>
     <div id="echotree">
     </div>    
@@ -100,8 +113,20 @@ function getCookie(c_name) {
     }
 }   
 
+// Odd construct: use date/time as unique ID, guarding
+// against duplicates via the "uniqueId = null":
+var uniqueId = null,
+    getUniqueName = function(prefix) {
+        if (!uniqueId) uniqueId = (new Date()).getTime();
+        return (prefix || 'id') + (uniqueId++);
+    };
+
 // Get player IDs for myself and the other player:
 var thisEmail   = this.getCookie("echoTreeOwnEmail");
+if(typeof(thisEmail) === "undefined") {
+    thisEmail = getUniqueName("browser");
+}
+
 var otherEmail  = this.getCookie("echoTreeOtherEmail");
 
 // Initial database to use as the language model:
@@ -338,6 +363,26 @@ function setNewDefaultDb(dbName) {
     sendNewRootWord(currentRootWord);
 }
 
+// User selected to subscribe to a tree type:
+function newSubscription() {
+    var subscriptionMenu = document.getElementById("subscriptions");
+    var subscriptionChoice = subscriptionMenu.options[subscriptionMenu.selectedIndex].value;
+    if (subscriptionChoice == "<nobody>")
+	  // Unsubscribe from all tree types:
+	  subscribeToTree(thisEmail, "<nobody>", "<all>");
+    else
+	  subscribeToTree(thisEmail, "<all>", subscriptionChoice);
+}
+
+function getSelectedArity() {
+   var arityRadios = document.getElementsByName('arity');
+   for (var i = 0; length < arityRadios.length; i++) {
+       if (arityRadios[i].checked) {
+           return arityRadios[i].value;
+       }
+   }    
+}
+
 // Given a word, tell browser to make that word into the 
 // new root. We pass an array whose first val is the new
 // root word. The remainder are all the player IDs to whom
@@ -345,10 +390,12 @@ function setNewDefaultDb(dbName) {
 function sendNewRootWord(word) {
     if (typeof thisEmail === 'undefined')
 	thisEmail = 'None';
+    currentArity = getSelectedArity();
+    treeType     = dbToUse + "|" + currentArity;
     newWordCmd   = {'command':'newRootWord',
 		    'submitter':thisEmail, 
 		    'word':word, 
-		    'treeType':dbToUse};
+		    'treeType':treeType};
     ws.send(JSON.stringify(newWordCmd));
     currentRootWord = word;
 }
