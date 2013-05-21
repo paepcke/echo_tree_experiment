@@ -34,7 +34,7 @@
 	<input type="radio" name="arity" id="arity" value="Trigrams" onclick="sendNewArity('trigrams')">Trigrams
 	<select name=dblist id=dblist onchange="setNewDefaultDb()">
 	  <option value="henryBlog">Henry's Blog</option>
-	  <option value="conversations">Conversations (Fisher 11k)</option>
+	  <option value="conversations">Conversations (Fisher 11k) disabled="1"</option>
 	  <option value="dmozRecreation">Recreation (Dmoz)</option>
 	  <option value="googleNgrams" disabled="1">Google 1T</option>
 	</select>
@@ -127,14 +127,18 @@ if(typeof(thisEmail) === "undefined") {
     thisEmail = getUniqueName("browser");
 }
 
-var otherEmail  = this.getCookie("echoTreeOtherEmail");
+if (typeof(whoami) === "undefined") {
+   whoami = thisEmail
+}
 
-// Initial database to use as the language model:
-var dbToUse = 'henryBlog';
+var otherEmail  = this.getCookie("echoTreeOtherEmail");
 
 // Most recently requested tree root word
 // (Equivalent to 'currently showing tree'):
 var currentRootWord = "you";
+
+// Initial database to use as the language model:
+var dbToUse = "henryBlog";
 
 // Initialize the input text field to the above
 // initial default root word:
@@ -354,7 +358,7 @@ function sendNewArity(arity) {
 
 // Given the DB dropdown list, send a db change to 
 // the server:
-function setNewDefaultDb(dbName) {
+function setNewDefaultDb() {
     var dbSelectMenu = document.getElementById("dblist");
     var selectedDb = dbSelectMenu.options[dbSelectMenu.selectedIndex].value;
     // Global var:
@@ -428,12 +432,18 @@ function handleEnterInWordFld(e) {
 function handleMouseDown(node, el) {
     //alert("Word: " + node.word);
     //alert("Button: " + this.event.which);
+    currentArity = getSelectedArity();
+    treeType     = dbToUse + "|" + currentArity;
+    // Get the word(s) of the node on which user
+    // clicked. For trigrams that will be two words
+    // separated by whitespace. For bigrams: only
+    // one word. Grab the last word in either case:
+    newRootWord = node.word.substring(node.word.lastIndexOf(" ")+1);
     if (this.event.which == 1) {// Left click
-	//********* Fix the hard-coding
 	newRootWrdCmd = {'command':'newRootWord',
 			 'submitter':whoami, 
-			 'word':node.word, 
-			 'treeType':'henryBlog'};
+			 'word':newRootWord, 
+			 'treeType':treeType};
 	ws.send(JSON.stringify(newRootWrdCmd));
     }
     else if (this.event.which == 2) // Middle click
