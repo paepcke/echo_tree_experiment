@@ -1,0 +1,8 @@
+It:	          1  0
+was: 	          0  0
+just:             0  1
+accommodations:   0  0
+that              0  1
+had		  1  0
+a		  0  1
+nightmare	  0  0

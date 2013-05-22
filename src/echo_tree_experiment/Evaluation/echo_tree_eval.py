@@ -5,15 +5,29 @@ from collections import deque;
 from collections import OrderedDict;
 import argparse;
 
-from echo_tree.echo_tree import WORD_TREE_BREADTH;
-from echo_tree.echo_tree import WORD_TREE_DEPTH;
-from echo_tree.echo_tree import WordExplorer;
+from echo_tree_experiment.echo_tree import WORD_TREE_BREADTH;
+from echo_tree_experiment.echo_tree import WORD_TREE_DEPTH;
+from echo_tree_experiment.echo_tree import WordExplorer;
 
-from echo_tree.make_database_from_emails import STOPWORDS;
+STOPWORDS =  ['a','able','about','across','after','all','almost','also','am','among','an','and','any',
+              'are','as','at','be','because','been','but','by','can','cannot','could','dear','did','do',
+              'does','either','else','ever','every','for','from','get','got','had','has','have','he',
+              'her','hers','him','his','how','however','i','if','in','into','is','it','its','just',
+              'least','let','like','likely','may','me','might','most','must','my','neither','no','nor',
+              'not','of','off','often','on','only','or','other','our','own','rather','said','say','says',
+              'she','should','since','so','some','than','that','the','their','them','then','there','these',
+              'they','this','tis','to','too','twas','us','wants','was','we','were','what','when','where',
+              'which','while','who','whom','why','will','with','would','yet','you','your',
+              'subject', 'cc', 'bcc', 'nbspb', 'mr.', 'inc.', 'one', 'two', 'three', 'four', 'five', 
+              'six', 'seven', 'eight', 'nine', 'ten', 'enron', 'http'];
+
+# All of string.punctuation, except for comma, which is
+# the Stanford NLP token separator:
+PUNCTUATION = '!"#$%&\'()*+-./:;<=>?@[\\]^_`{|}~'
 
 class SentencePerformance(object):
     '''
-    Stuct to hold measurement results of one sentence.
+    *********Stuct to hold measurement results of one sentence.
        - sentenceLen: number of words that are not stopwords.
        - failures: number of times a tree did not contain one of the words, and a new tree needed to 
                    be constructed by typing in the word.
@@ -333,7 +347,7 @@ class Evaluator(object):
     def initWordCaptureTally(self):
         self.performanceTally = [];
         
-    def tallyWordCapture(self, sentenceTokens, emailID=-1, sentenceID=None):
+    def tallyWordCapture(self, sentenceTokens, emailID=-1, sentenceID=None, removeStopwords=False):
         '''
         Measures overlap of each sentence token with trees created
         by this evaluator's database. Stopwords are removed here. Measures:
@@ -353,10 +367,13 @@ class Evaluator(object):
         @type emailID: <any>
         @param sentenceID: optional ID to identify the given sentence within its email.
         @type sentenceID: <any>
+        @param removeStopwords: whether or not to remove stopwords.
+        @type removeStopwords: boolean
         '''
         for word in sentenceTokens:
-            if word.lower() in STOPWORDS or word in [';', ',', ':', '!', '%']:
+            if removeStopwords and (word.lower() in STOPWORDS):
                 sentenceTokens.remove(word);
+                
         # Make a new SentencePerformance instance, passing this evaluator,
         # the array of stopword-free tokens, and the index in the self.performanceTally
         # array at which this new SentencePerformance instance will reside:
@@ -365,7 +382,7 @@ class Evaluator(object):
         sentencePerf = SentencePerformance(self, sentenceTokens, emailID=emailID, sentenceID=sentenceID);
         
         # Start for real:
-        tree = self.wordExplorer.makeWordTree(sentenceTokens[0]);
+        tree = self.wordExplorer.makeWordTree(sentenceTokens[0], self.arity);
         treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
         for wordPos, word in enumerate(sentenceTokens[1:]):
             word = word.lower();
@@ -379,7 +396,7 @@ class Evaluator(object):
                         if futureWord in treeWords:
                             sentencePerf.addOutOfSeq();
                 # Build a new tree by (virtually) typing in the word
-                tree =  self.wordExplorer.makeWordTree(word);
+                tree =  self.wordExplorer.makeWordTree(word, self.arity);
                 treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
                 continue;
             # Found word in tree:
@@ -398,7 +415,6 @@ class Evaluator(object):
                 letter = fd.read(1);
                 if letter == sentenceOpener:
                     # Found start of sentence
-                    res = letter;
                     break;
                 if len(letter) == 0:
                     # Gone through the whole file:
@@ -414,9 +430,12 @@ class Evaluator(object):
             except IOError:
                 print "Warning: ignoring unfinished sentence: %s." % res;
                 return None
-            res += letter;
             if letter == sentenceCloser:
-                return res;
+                # Clip off the closing comma:
+                return res[:-1];
+            if letter == " " or letter in PUNCTUATION:
+                continue;
+            res += letter;
             
     def checksum(self, theStr):
         '''
@@ -429,7 +448,7 @@ class Evaluator(object):
         return reduce(lambda x,y:x+y, map(ord, theStr))
             
             
-    def measurePerformance(self, csvFilePath, dbFilePath, tokenFilePaths, verbose=False):
+    def measurePerformance(self, csvFilePath, dbFilePath, arity, tokenFilePaths, verbose=False, removeStopwords=False):
         '''
         Token files must hold a string as produced by the Stanford NLP core 
         tokenizer/sentence segmenter. Ex: "[foo, bar, fum]". Notice the ',<space>'
@@ -439,16 +458,18 @@ class Evaluator(object):
         opened/created for output, and that the token file paths are accessible
         for reading.
         
-        @param evaluator:
-        @type evaluator:
         @param csvFilePath:
         @type csvFilePath:
         @param dbFilePath:
         @type dbFilePath:
+        @param arity: arity of ngrams to use in the trees
+        @type arity: int
         @param tokenFilePaths: fully qualified paths to each token file.
         @type tokenFilePaths:
         @param verbose:
         @type verbose:
+        @param removeStopwords: whether or not to remove ngrams with stopwords from the echo trees
+        @type  removeStopwords: boolean
         @return: CSV formated table.
         @rtype: string
         '''
@@ -456,6 +477,8 @@ class Evaluator(object):
             numSentencesDone = 0;
             reportEvery = 10; # progress every 10 sentences
             
+        self.arity = arity;
+        
         self.initWordCaptureTally();
         for tokenFilePath in tokenFilePaths:
             msgID = self.checksum(tokenFilePath);
@@ -466,7 +489,7 @@ class Evaluator(object):
                     if pythonSentenceTokens is None:
                         # Done with one file.
                         break;
-                    self.tallyWordCapture(pythonSentenceTokens.split(', '), emailID=msgID, sentenceID=sentenceID);
+                    self.tallyWordCapture(pythonSentenceTokens.split(','), emailID=msgID, sentenceID=sentenceID, removeStopwords=removeStopwords);
                     sentenceID += 1;
                     if verbose:
                         numSentencesDone += 1;
@@ -495,6 +518,10 @@ if __name__ == '__main__':
                         dest='verbose',
                         action='store_true');
     
+    parser.add_argument("-r", "--removeStopwords, help=if present, will remove stopwords from input text.", 
+                        dest='remStopwords',
+                        action='store_true');
+        
     parser.add_argument('csvFilePath', 
                         type=argparse.FileType('w'),
                         default=sys.stdout,
@@ -504,6 +531,11 @@ if __name__ == '__main__':
     parser.add_argument('dbFilePath', 
                         type=argparse.FileType('r'),
                         help="fully qualified name of SQLite db file to use."
+                        )
+    
+    parser.add_argument('arity', 
+                        type=int,
+                        help="Arity of ngrams to use (2 or 3)."
                         )
     
     parser.add_argument('tokenFilePaths', 
@@ -524,11 +556,17 @@ if __name__ == '__main__':
         fd.close();
         tokenFilePaths.append(fd.name);
     
+    if (args.arity != 2) and (args.arity != 3):
+        print("Error: Ngram arity must currently be either 2 or 3.");
+        sys.exit();
+    
     evaluator = Evaluator(args.dbFilePath.name);
     evaluator.measurePerformance(args.csvFilePath.name, 
                                  args.dbFilePath.name, 
+                                 args.arity,
                                  tokenFilePaths,
-                                 verbose=args.verbose
+                                 verbose=args.verbose,
+                                 removeStopwords=args.remStopwords
                                  );  
     
     sys.exit();

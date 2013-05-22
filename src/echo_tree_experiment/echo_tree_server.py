@@ -236,6 +236,9 @@ class EchoTreeService(WebSocketHandler):
         '''
         super(EchoTreeService, self).__init__(application, request, **kwargs);
         self.request = request;
+        #************
+        print("request: " + str(request))
+        #************
         self.myID = None; # Set as soon as one request comes in from this handler instantiation
         EchoTreeService.log("Browser at %s (%s) subscribing to EchoTrees." % (request.host, request.remote_ip));
         
