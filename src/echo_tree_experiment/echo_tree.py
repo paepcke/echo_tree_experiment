@@ -245,7 +245,7 @@ class WordExplorer(object):
         return json.dumps(wordTree);
       
    
-    def printWordTree(self, wordTree, treeDepth, currentStr=[], currDepth=0):
+    def printWordTree(self, wordTree, treeDepth, currentStr=None, currDepth=0):
         rootWord = wordTree['word'];
         followers = wordTree['followWordObjs'];
         if currentStr is None:

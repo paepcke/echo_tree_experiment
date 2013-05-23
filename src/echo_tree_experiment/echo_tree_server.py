@@ -38,6 +38,11 @@ ECHO_TREE_GET_PORT = 5005;
 #ARITY_SERVED = ARITY.TRIGRAM;
 ARITY_SERVED = ARITY.BIGRAM;
 
+# Special creator name for subscribing to 
+# all creators of a particular tree:
+ALL_SUBSCRIBERS_NAME = "<all>";
+NO_SUBSCRIBERS_NAME = "<nobody>";
+
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/testDb.db");
 #DBPATH = os.path.join(os.path.realpath(os.path.dirname(__file__)), "Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
 scriptDir = os.path.realpath(os.path.dirname(__file__)); 
@@ -56,23 +61,37 @@ TREE_EVENT_LISTEN_SCRIPT_NAME = "standaloneTreeClient.html";
 BLOCK_QUEUE = True;
 
 class TreeTypes:
-    RECREATION_NGRAMS = 'dmozRecreation';
+    RECREATION_BIGRAMS = 'dmozRecreation|Bigrams';
+    RECREATION_TRIGRAMS = 'dmozRecreation|Trigrams';
     GOOGLE_NGRAMS     = 'googleNgrams';
-    HENRY_BLOG_NGRAMS = 'henryBlog';
-    FISHER_CONVERSATIONS = 'conversations';
+    HENRY_BLOG_BIGRAMS = 'henryBlog|Bigrams';
+    HENRY_BLOG_TRIGRAMS = 'henryBlog|Trigrams';
+    FISHER_CONVERSATIONS_BIGRAMS = 'conversations|Bigrams';
+    FISHER_CONVERSATIONS_TRIGRAMS = 'conversations|Trigrams';
     allTypes = [
-                FISHER_CONVERSATIONS,
+                FISHER_CONVERSATIONS_BIGRAMS,
+                FISHER_CONVERSATIONS_TRIGRAMS,
                 GOOGLE_NGRAMS,
-                HENRY_BLOG_NGRAMS,
-                RECREATION_NGRAMS
+                HENRY_BLOG_BIGRAMS,
+                HENRY_BLOG_TRIGRAMS,
+                RECREATION_BIGRAMS,
+                RECREATION_TRIGRAMS
                 ]
 
 dbPathLookup = {
-                TreeTypes.RECREATION_NGRAMS    : DBPATH_DMOZ_RECREATION,
-                TreeTypes.HENRY_BLOG_NGRAMS    : DBPATH_HENRY_BLOG,
+                TreeTypes.RECREATION_BIGRAMS    : DBPATH_DMOZ_RECREATION,
+                TreeTypes.RECREATION_TRIGRAMS    : DBPATH_DMOZ_RECREATION,
+                TreeTypes.HENRY_BLOG_BIGRAMS    : DBPATH_HENRY_BLOG,
+                TreeTypes.HENRY_BLOG_TRIGRAMS    : DBPATH_HENRY_BLOG,
                 TreeTypes.GOOGLE_NGRAMS        : DBPATH_GOOGLE,
-                TreeTypes.FISHER_CONVERSATIONS : DBPATH_FISHER_CONVERSATIONS
+                TreeTypes.FISHER_CONVERSATIONS_BIGRAMS : DBPATH_FISHER_CONVERSATIONS,
+                TreeTypes.FISHER_CONVERSATIONS_TRIGRAMS : DBPATH_FISHER_CONVERSATIONS
                 }
+
+class SubscribeAction:
+    UNSUBSCRIBE = 0;
+    SUBSCRIBE = 1;
+
 
 # -----------------------------------------  Class TreeContainer --------------------
 
@@ -130,7 +149,13 @@ class TreeContainer(object):
 
     def removeSubscriber(self, subscriberID):
         with EchoTreeService.activeHandlersChangeLock:
-            del EchoTreeService.activeHandlers[subscriberID];
+            try:
+                currentSubscribers = self.theSubscribers;
+                currentSubscribers.remove(subscriberID);
+                self.theSubscribers = currentSubscribers;
+                #del EchoTreeService.activeHandlers[subscriberID];
+            except ValueError as e:
+                EchoTreeService.log("Attempt to unsubscribe '%s' who is not subscribed." % str(subscriberID));
 
     def subscribers(self):
         return self.theSubscribers;
@@ -211,6 +236,9 @@ class EchoTreeService(WebSocketHandler):
         '''
         super(EchoTreeService, self).__init__(application, request, **kwargs);
         self.request = request;
+        #************
+        print("request: " + str(request))
+        #************
         self.myID = None; # Set as soon as one request comes in from this handler instantiation
         EchoTreeService.log("Browser at %s (%s) subscribing to EchoTrees." % (request.host, request.remote_ip));
         
@@ -291,7 +319,7 @@ class EchoTreeService(WebSocketHandler):
                 container.addSubscriber(submitter, self);
     
             EchoTreeService.triggerTreeComputationAndDistrib(container, newRootWord);
-            EchoTreeService.log("New root word from connected browser: '%s': '%s'" % (submitter,newRootWord));
+            EchoTreeService.log("New root word from connected browser: '%s': '%s' for tree type '%s'" % (submitter,newRootWord,treeType));
             return;
             
         elif cmd == 'subscribe':
@@ -305,33 +333,15 @@ class EchoTreeService(WebSocketHandler):
             # In case we didn't know before: now we know the ID of
             # this handler's browser:
             self.myID = submitter;
+            
+            EchoTreeService.log("New subscription request from connected browser: '%s' for tree type '%s' by creator %s." % (submitter,treeType, treeCreator));
                 
             # Try to find the tree creator's TreeContainer instances:
-            try:
-                treeContainersForTreeCreator = EchoTreeService.treeContainers[treeCreator];
-            except KeyError:
-                # the creator to whom the caller is trying to subscribe
-                # does not have a TreeContainer instance for any tree type.
-                # Create one, with None for the current tree:
-                EchoTreeService.treeContainers[treeCreator] = [TreeContainer(treeCreator, treeType)];
-                treeContainersForTreeCreator = EchoTreeService.treeContainers[treeCreator];
-                #EchoTreeService.log("Error: Request from %s subscribing to %s for tree type %s. But %s has no tree containers at all." % (str(submitter),str(treeCreator), str(treeType),str(treeCreator)));
-                #return;
-            # Found an array of tree containers for the specified treeCreator.
-            # But does that creator deal with the specified tree type?
-            foundIt = False;
-            for container in treeContainersForTreeCreator:
-                if container.treeType() == treeType:
-                    foundIt = True;
-                    break;
-            if not foundIt:
-                EchoTreeService.log("Request from %s subscribing to %s for tree type %s. But %s has no such tree type" % (str(submitter),
-                                                                                                                          str(treeCreator),
-                                                                                                                          str(treeType),
-                                                                                                                          str(treeCreator)));
-                return;
-            container.addSubscriber(submitter, self);
-
+            # Special case: the creater "<all>", which subscribes to the
+            # given tree type for all tree creators:
+            self.handleTreeSubscriptions(submitter, treeCreator, treeType);
+            return;
+           
         elif cmd == 'newArity':
             newArity = msgDict['arity'];
             if newArity == 'bigrams':
@@ -405,6 +415,59 @@ class EchoTreeService(WebSocketHandler):
             EchoTreeService.logFD.flush();
         if EchoTreeService.logToConsole and EchoTreeService.logFD != sys.stdout:
             sys.stdout.write(theStr + '\n');
+        
+    def handleTreeSubscriptions(self, submitter, treeCreator, treeType):
+        
+        # Subscribe to all trees of the given type?
+        if treeCreator == ALL_SUBSCRIBERS_NAME:
+            allCreators = EchoTreeService.treeContainers.keys();
+            for creatorName in allCreators:
+                self.subscribeHelper(submitter, creatorName, treeType, SubscribeAction.SUBSCRIBE);
+            return;
+        # Unsubscribe from all trees of the given type (except the submitter's):
+        elif treeCreator == NO_SUBSCRIBERS_NAME:
+            allCreators = EchoTreeService.treeContainers.keys();
+            for creatorName in allCreators:
+                if creatorName != submitter:
+                    self.subscribeHelper(submitter, creatorName, treeType, SubscribeAction.UNSUBSCRIBE);
+            return;
+            
+        # Subscribe to one particular creator's trees of given type:
+        self.subscribeHelper(submitter, treeCreator, treeType, SubscribeAction.SUBSCRIBE);
+        
+    def subscribeHelper(self, submitter, treeCreator, treeType, subscribeAction):
+        
+        # Find the (individual) tree creator to whom caller wishes to subscribe:
+        try:
+            treeContainersForTreeCreator = EchoTreeService.treeContainers[treeCreator];
+        except KeyError:
+            # the creator to whom the caller is trying to subscribe
+            # does not have a TreeContainer instance for any tree type.
+            # Create one, with None for the current tree:
+            EchoTreeService.treeContainers[treeCreator] = [TreeContainer(treeCreator, treeType)];
+            treeContainersForTreeCreator = EchoTreeService.treeContainers[treeCreator];
+            #EchoTreeService.log("Error: Request from %s subscribing to %s for tree type %s. But %s has no tree containers at all." % (str(submitter),str(treeCreator), str(treeType),str(treeCreator)));
+            #return;
+        # Found an array of tree containers for the specified treeCreator.
+        # But does that creator deal with the specified tree type?
+        foundIt = False;
+        for container in treeContainersForTreeCreator:
+            if (container.treeType() == treeType) or (treeType == "<all>"):
+                foundIt = True;
+                break;
+        if not foundIt:
+            EchoTreeService.log("Request from %s subscribing to %s for tree type %s. But %s has no such tree type" % (str(submitter),
+                                                                                                                      str(treeCreator),
+                                                                                                                      str(treeType),
+                                                                                                                      str(treeCreator)));
+            return;
+        if subscribeAction == SubscribeAction.SUBSCRIBE:
+            if submitter != container.theOwner:                                                                                                                     
+                container.addSubscriber(submitter, self);
+        else:
+            if submitter != container.theOwner:                                                                                                                                 
+                container.removeSubscriber(submitter);
+                
         
     def getTreeContainer(self, submitterID, treeType):
         try:
