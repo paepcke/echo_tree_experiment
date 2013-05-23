@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json;
+import copy;
 from collections import deque;
 from collections import OrderedDict;
 import argparse;
@@ -25,6 +26,12 @@ STOPWORDS =  ['a','able','about','across','after','all','almost','also','am','am
 # the Stanford NLP token separator:
 PUNCTUATION = '!"#$%&\'()*+-./:;<=>?@[\\]^_`{|}~'
 
+class Verbosity:
+    NONE  = 0;
+    LOG   = 1;
+    DEBUG = 2;
+
+
 class SentencePerformance(object):
     '''
     *********Stuct to hold measurement results of one sentence.
@@ -35,15 +42,13 @@ class SentencePerformance(object):
        - depths: for each tree depth, how many of the sentence's words appeared at that depth.   
     '''
     
-    def __init__(self, evaluator, sentenceNoStopwords, emailID=-1, sentenceID=None):
+    def __init__(self, evaluator, tokenSequence, emailID=-1, sentenceID=None):
         self.evaluator = evaluator;
-        self.sentenceNoStopwords = sentenceNoStopwords;
         self.emailID = emailID;
         self.sentenceID = sentenceID;
         
-        self.sentenceLen = len(sentenceNoStopwords);
-        # Count one failure for having to type in the first word:
-        self.failures    = 1;
+        self.sentenceLen = len(tokenSequence);
+        self.failures    = 0;
         self.outOfSeqs   = 0;
         self.depths      = {};
     
@@ -90,7 +95,34 @@ class SentencePerformance(object):
         Return percentage of times a word was found in a currently
         displayed tree.
         '''
-        return 100 - (self.getNetFailure() * 100.0 / self.sentenceLen);
+        # Subtract 1 from sentence len, b/c the last word had
+        # no chance to predict a word:
+        return 100 - (self.getNetFailure() * 100.0 / (self.sentenceLen - 1));
+    
+    def getDepthWeightedSuccessSentence(self):
+        '''
+        Return a number between 0 and 1 that provides
+        a weighted prediction success: successful predictions
+        at tree level 1 earn one point. Successful predictions
+        at tree level 2 earn 1/2 point; at level 3: 1/4 point, etc.
+        The sum over that sentence is divided by (sentenceLength - 1)
+        to normalize over that length: 
+        
+                   (1/2)**(depth-1) * countAtDepth
+            sum(   --------------------------  ) for all words in sentence
+                        (sentenceLen - 1)
+        
+        Note that only one prediction is rewarded: the one that occurs
+        at the highest tree level.
+        '''
+        res = 0.0;
+        for depth in range(1, self.evaluator.getMaxDepthAllSentences() + 1):
+            res += 0.5**(depth-1) * self.getDepthCount(depth);
+            if (res > 0.0):
+                # Subtract 1 from sentence len, b/c the last word had
+                # no chance to predict a word:
+                return res/(self.sentenceLen - 1);
+        return res;
         
     def getDepthCount(self, depth):
         '''
@@ -145,6 +177,7 @@ class SentencePerformance(object):
         row += ',' + '%.2f' % self.getNetSuccess();
         for depth in range(1, self.evaluator.getMaxDepthAllSentences() + 1):
             row += ',' + str(self.getDepthCount(depth));
+        row += ',' + str(self.getDepthWeightedSuccessSentence());
         return row;
         
 
@@ -153,6 +186,7 @@ class Evaluator(object):
     def __init__(self, dbPath):
         self.wordExplorer = WordExplorer(dbPath);
         self.initWordCaptureTally();
+        self.verbosity = Verbosity.NONE;
         
     def getMaxDepthAllSentences(self):
         '''
@@ -180,6 +214,7 @@ class Evaluator(object):
         header = 'EmailID,SentenceID,SentenceLen,Failures,OutofSeq,NetFailure,NetSuccess';        
         for depthIndex in range(1,self.getMaxDepthAllSentences() + 1):
             header += ',Depth_' + str(depthIndex);
+        header += ',DepthWeightedScore'
         return header;
     
     def extractWordSet(self, jsonEchoTreeStr):
@@ -206,6 +241,9 @@ class Evaluator(object):
         @return: the depth at which the word occurs in the tree, or 0 if not present.
         @rtype: {int | None}
         '''
+        #**********************
+        #self.wordExplorer.printWordTree(pythonEchoTree, 2);
+        #**********************
         return self.getDepthFromWordHelper(pythonEchoTree, word, depth=0);
     
     def getDepthFromWordHelper(self, pythonEchoTree, wordToFind, depth=0):
@@ -370,9 +408,18 @@ class Evaluator(object):
         @param removeStopwords: whether or not to remove stopwords.
         @type removeStopwords: boolean
         '''
-        for word in sentenceTokens:
+        # We'll modify sentenceTokens in the loop
+        # below, so get a shallow copy for the loop:
+        tokenCopy = copy.copy(sentenceTokens);
+        for word in tokenCopy:
+            if len(word) == 0:
+                sentenceTokens.remove(word);
+                continue;
             if removeStopwords and (word.lower() in STOPWORDS):
                 sentenceTokens.remove(word);
+        
+        if self.verbosity == Verbosity.DEBUG:
+            print("Sentence %d tokens after cleanup: %s" % (sentenceID,str(sentenceTokens)));        
                 
         # Make a new SentencePerformance instance, passing this evaluator,
         # the array of stopword-free tokens, and the index in the self.performanceTally
@@ -384,9 +431,15 @@ class Evaluator(object):
         # Start for real:
         tree = self.wordExplorer.makeWordTree(sentenceTokens[0], self.arity);
         treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
+        prevWord = sentenceTokens[0];
         for wordPos, word in enumerate(sentenceTokens[1:]):
             word = word.lower();
             wordDepth = self.getDepthFromWord(tree, word);
+            if self.verbosity == Verbosity.DEBUG:
+                print("   Word %s score:\t\t%f  %f  %f" % (prevWord,
+                                                       1.0 if wordDepth == 1 else 0.0, 
+                                                       0.5 if wordDepth == 2 else 0.0,
+                                                       sentencePerf.getDepthWeightedSuccessSentence()));
             if wordDepth is None:
                 # wanted word is not in tree anywhere:
                 sentencePerf.addFailure();
@@ -395,16 +448,29 @@ class Evaluator(object):
                     for futureWord in sentenceTokens[wordPos+1:]:
                         if futureWord in treeWords:
                             sentencePerf.addOutOfSeq();
-                # Build a new tree by (virtually) typing in the word
-                tree =  self.wordExplorer.makeWordTree(word, self.arity);
-                treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
-                continue;
-            # Found word in tree:
-            sentencePerf.addWordDepth(wordDepth);
+            else:
+                # Found word in tree:
+                sentencePerf.addWordDepth(wordDepth);
+            # Build a new tree from the (virtually) typed in current word
+            tree =  self.wordExplorer.makeWordTree(word, self.arity);
+            treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
+            prevWord = word;
         
         # Finished looking at every toking in the sentence.
         self.performanceTally.append(sentencePerf);
-        
+        if self.verbosity == Verbosity.DEBUG:
+            totalDepthWeightedScore = 0.0
+            totalDepth1Score = 0;
+            totalDepth2Score = 0;
+            for performance in self.performanceTally:
+                totalDepthWeightedScore += performance.getDepthWeightedSuccessSentence();
+                totalDepth1Score        += performance.getDepthCount(1);
+                totalDepth2Score        += performance.getDepthCount(2);
+                
+            print("\t\t\tTotal: \t%f  %f  %f" % (totalDepth1Score,
+                                                 totalDepth2Score * 0.5,
+                                                 totalDepthWeightedScore));
+            print("\t\t\t       \t-------------------------------");
     def readSentence(self, fd):
         sentenceOpener = '['
         sentenceCloser= ']'
@@ -431,8 +497,7 @@ class Evaluator(object):
                 print "Warning: ignoring unfinished sentence: %s." % res;
                 return None
             if letter == sentenceCloser:
-                # Clip off the closing comma:
-                return res[:-1];
+                return res;
             if letter == " " or letter in PUNCTUATION:
                 continue;
             res += letter;
@@ -448,7 +513,7 @@ class Evaluator(object):
         return reduce(lambda x,y:x+y, map(ord, theStr))
             
             
-    def measurePerformance(self, csvFilePath, dbFilePath, arity, tokenFilePaths, verbose=False, removeStopwords=False):
+    def measurePerformance(self, csvFilePath, dbFilePath, arity, tokenFilePaths, verbosity=Verbosity.NONE, removeStopwords=False):
         '''
         Token files must hold a string as produced by the Stanford NLP core 
         tokenizer/sentence segmenter. Ex: "[foo, bar, fum]". Notice the ',<space>'
@@ -458,24 +523,27 @@ class Evaluator(object):
         opened/created for output, and that the token file paths are accessible
         for reading.
         
-        @param csvFilePath:
-        @type csvFilePath:
-        @param dbFilePath:
-        @type dbFilePath:
+        @param csvFilePath: path to which to write the sentence-by-sentence CSV lines
+        @type csvFilePath: string
+        @param dbFilePath: path to the Bigram/Trigram probabilities table Sqlite3 db to use
+        @type dbFilePath: sting
         @param arity: arity of ngrams to use in the trees
         @type arity: int
         @param tokenFilePaths: fully qualified paths to each token file.
-        @type tokenFilePaths:
-        @param verbose:
-        @type verbose:
+        @type tokenFilePaths: string
+        @param verbosity: if Verbosity.NONE: silent; if Verbosity.LOG: msg every 10 sentences. For debugging: Verbosity.DEBUG
+        @type verbose: Verbosity
         @param removeStopwords: whether or not to remove ngrams with stopwords from the echo trees
         @type  removeStopwords: boolean
-        @return: CSV formated table.
-        @rtype: string
+        @return: Average of depth-weighted performance of all sentences
+        @rtype: float.
         '''
-        if verbose:
+        if verbosity > 0:
             numSentencesDone = 0;
             reportEvery = 10; # progress every 10 sentences
+            # Be debug level verbose:
+            if verbosity > 1:
+                self.verbosity = verbosity;
             
         self.arity = arity;
         
@@ -486,22 +554,35 @@ class Evaluator(object):
             with open(tokenFilePath, 'r') as tokenFD:
                 while 1:
                     pythonSentenceTokens = self.readSentence(tokenFD);
+                    if self.verbosity == Verbosity.DEBUG:
+                        print("Sentence %d tokens: %s" % (numSentencesDone,str(pythonSentenceTokens)));
                     if pythonSentenceTokens is None:
                         # Done with one file.
                         break;
                     self.tallyWordCapture(pythonSentenceTokens.split(','), emailID=msgID, sentenceID=sentenceID, removeStopwords=removeStopwords);
                     sentenceID += 1;
-                    if verbose:
+                    if self.verbosity != Verbosity.NONE:
                         numSentencesDone += 1;
                         if numSentencesDone % reportEvery == 0:
                             print "At file %s. Done %d sentences." % (os.path.basename(tokenFilePath), numSentencesDone);
                             
         with open(csvFilePath,'w') as CsvFd:
             csvAll = self.toCSV(outFileFD=CsvFd);
-        if verbose:
+        if self.verbosity == Verbosity.DEBUG:
             print csvAll;
-        return csvAll;
-        
+        # Compute mean sentence performance:
+        totalPerfDbAndArity = 0.0;
+        sentenceID = 0;
+        for sentencePerformance in self.performanceTally:
+            totalPerfDbAndArity += sentencePerformance.getDepthWeightedSuccessSentence();
+            if self.verbosity == Verbosity.DEBUG:
+                print("Sentence %d tally: %f" % (sentenceID, sentencePerformance.getDepthWeightedSuccessSentence()));
+                sentenceID += 1;
+        if self.verbosity == Verbosity.DEBUG:
+            print("Total score (sumSentenceScores/numSentences): %f / %d = %f" % (totalPerfDbAndArity, 
+                                                                                  len(self.performanceTally), 
+                                                                                  totalPerfDbAndArity/len(self.performanceTally)));
+        return totalPerfDbAndArity/len(self.performanceTally)
 
 # ---------------------------------- Running and Testing ------------------------------------
 
@@ -560,12 +641,17 @@ if __name__ == '__main__':
         print("Error: Ngram arity must currently be either 2 or 3.");
         sys.exit();
     
+    if args.verbose:
+        verbosity = Verbosity.LOG;
+    else:
+        verbosity = Verbosity.NONE;
+        
     evaluator = Evaluator(args.dbFilePath.name);
     evaluator.measurePerformance(args.csvFilePath.name, 
                                  args.dbFilePath.name, 
                                  args.arity,
                                  tokenFilePaths,
-                                 verbose=args.verbose,
+                                 verbosity=verbosity,
                                  removeStopwords=args.remStopwords
                                  );  
     
@@ -692,4 +778,4 @@ if __name__ == '__main__':
 #    depth = evaluator.getDepthFromWord(pythonTree, 'foo');
 #    print str(depth); # None
 #
-unittest.main();
+#unittest.main();

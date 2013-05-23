@@ -144,92 +144,6 @@ var dbToUse = "henryBlog";
 // initial default root word:
 document.getElementById("newWord").value = currentRootWord;
 
-// Check for browser support:
-if(typeof(WebSocket)!=="undefined") {
-
-
-    // Create a WebSocket connected back to the EchoTree server 
-    // where this script came from:
-    //var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
-    var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
-
-    ws.onopen = function () {
-	// Commented out because everyone is automatically 
-	// a subscriber of trees whose creation they trigger
-	// via submission of a new root word.
-	// if (whoami === "partnerID") {
-	//     subscribeCmd   = {'command':'subscribe',
-	// 		      'submitter':thisEmail, 
-	// 		      'treeCreator':thatEmail,
-	// 		      'treeType':'dmozRecreation'};
-	//     ws.send(JSON.stringify(subscribeCmd));
-	// }
-	// Kickstart this connection by sending the root word
-	// 0 (zero). Doesn't matter what it is, just some word.
-	sendNewRootWord(currentRootWord);
-    };
-
-    ws.onerror = function () {
-	alert('ERROR: ' + evt.data);
-    };
-
-    ws.onmessage = function (event) {
-	try {
-	    if (event.data.length == 0)
-		return;
-	    root = eval("(" + event.data + ")");
-	} catch(err) {
-	    return;
-	}
-	root.x0 = h / 2;
-	root.y0 = 0;
-	
-	// As default, start with tree collapsed.
-	// Obviously can change this in the future.
-	function collapse(d) {
-	    if (d.followWordObjs) {
-		if (d.followWordObjs.length > 0) {
-		    d.followWordObjs.forEach(collapse);
-		    d.children = null;
-		}
-	    }
-	}
-	
-	// Children are visible, followWordObjs are not.
-	// Expand turns everything into children.
-	function expand(d) {
-	    //console.log('expanding ' + d.word);
-	    if (d.followWordObjs) {
-		if (d.followWordObjs.length > 0) {
-		    //console.log(' * expanding fwos')
-		    d.children = d.followWordObjs;
-		    d.followWordObjs = null;
-		    d.children.forEach(expand)
-		}
-	    }
-	    
-	    if (d.children) {
-		if (d.children.length > 0) {
-		    d.children.forEach(expand)
-		}
-	    }
-	}
-	
-	root.followWordObjs.forEach(expand);
-	toggle(root);
-	update(root);
-    };
-
-    ws.onclose = function() {
-	// EchoTree server closed connection, likely b/c of a server restart:
-	window.location = "http://" + CONTACT_MACHINE + ":" + EXPERIMENT_FRONT_PAGE_PORT;
-	this.showMessage("EchoTree server closed our connection. Please log in again. Sorry for the inconvenience!");
-	
-    }
-} else {
-    // WebSockets not supported in this browser:
-    document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
-}
 
 this.showMsg = function(msg) {
     alert(msg);
@@ -651,6 +565,101 @@ function onIncorrect() {
 
 function onRestart() {
     alert("RESTART");
+}
+
+// Check for browser support:
+if(typeof(WebSocket)!=="undefined") {
+
+
+    // Create a WebSocket connected back to the EchoTree server 
+    // where this script came from:
+    //var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
+    var ws = new WebSocket("ws://" + CONTACT_MACHINE + ":" + ECHO_TREE_CONTACT_PORT + "/subscribe_to_echo_trees");
+
+    ws.onopen = function () {
+	// Commented out because everyone is automatically 
+	// a subscriber of trees whose creation they trigger
+	// via submission of a new root word.
+	// if (whoami === "partnerID") {
+	//     subscribeCmd   = {'command':'subscribe',
+	// 		      'submitter':thisEmail, 
+	// 		      'treeCreator':thatEmail,
+	// 		      'treeType':'dmozRecreation'};
+	//     ws.send(JSON.stringify(subscribeCmd));
+	// }
+	// Kickstart this connection by sending the root word
+	// 0 (zero). Doesn't matter what it is, just some word.
+        // However, there seems to be a race condition in WebSocket
+        // when sending information through the freshly opened
+        // socket, i.e. from within ws.onopen(). So use a delay:
+	//****window.setTimeout(ws.sendInitialRequest, 250); // milliseconds
+	sendNewRootWord(currentRootWord);
+    };
+
+    ws.sendInitialRequest = function () {
+        sendNewRootWord(currentRootWord);
+    }
+
+    ws.onerror = function () {
+	alert('ERROR: ' + evt.data);
+    };
+
+    ws.onmessage = function (event) {
+	try {
+	    if (event.data.length == 0)
+		return;
+	    root = eval("(" + event.data + ")");
+	} catch(err) {
+	    return;
+	}
+	root.x0 = h / 2;
+	root.y0 = 0;
+	
+	// As default, start with tree collapsed.
+	// Obviously can change this in the future.
+	function collapse(d) {
+	    if (d.followWordObjs) {
+		if (d.followWordObjs.length > 0) {
+		    d.followWordObjs.forEach(collapse);
+		    d.children = null;
+		}
+	    }
+	}
+	
+	// Children are visible, followWordObjs are not.
+	// Expand turns everything into children.
+	function expand(d) {
+	    //console.log('expanding ' + d.word);
+	    if (d.followWordObjs) {
+		if (d.followWordObjs.length > 0) {
+		    //console.log(' * expanding fwos')
+		    d.children = d.followWordObjs;
+		    d.followWordObjs = null;
+		    d.children.forEach(expand)
+		}
+	    }
+	    
+	    if (d.children) {
+		if (d.children.length > 0) {
+		    d.children.forEach(expand)
+		}
+	    }
+	}
+	
+	root.followWordObjs.forEach(expand);
+	toggle(root);
+	update(root);
+    };
+
+    ws.onclose = function() {
+	// EchoTree server closed connection, likely b/c of a server restart:
+	window.location = "http://" + CONTACT_MACHINE + ":" + EXPERIMENT_FRONT_PAGE_PORT;
+	this.showMessage("EchoTree server closed our connection. Please log in again. Sorry for the inconvenience!");
+	
+    }
+} else {
+    // WebSockets not supported in this browser:
+    document.getElementById("userMsg").innerHTML="Whoops! Your browser doesn't support WebSockets.";
 }
 
 </script>
