@@ -111,18 +111,15 @@ class SentencePerformance(object):
                    (1/2)**(depth-1) * countAtDepth
             sum(   --------------------------  ) for all words in sentence
                         (sentenceLen - 1)
-        
-        Note that only one prediction is rewarded: the one that occurs
-        at the highest tree level.
         '''
         res = 0.0;
-        for depth in range(1, self.evaluator.getMaxDepthAllSentences() + 1):
+        #maxDepth = self.evaluator.getMaxDepthAllSentences();
+        for depth in range(1, WORD_TREE_DEPTH):
             res += 0.5**(depth-1) * self.getDepthCount(depth);
-            if (res > 0.0):
-                # Subtract 1 from sentence len, b/c the last word had
-                # no chance to predict a word:
-                return res/(self.sentenceLen - 1);
-        return res;
+
+        # Subtract 1 from sentence len, b/c the last word had
+        # no chance to predict a word:
+        return res/(self.sentenceLen - 1);
         
     def getDepthCount(self, depth):
         '''
@@ -433,13 +430,12 @@ class Evaluator(object):
         treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
         prevWord = sentenceTokens[0];
         for wordPos, word in enumerate(sentenceTokens[1:]):
-            word = word.lower();
+            #word = word.lower();
             wordDepth = self.getDepthFromWord(tree, word);
             if self.verbosity == Verbosity.DEBUG:
-                print("   Word %s score:\t\t%f  %f  %f" % (prevWord,
+                print("   Word %s score:\t\t%f  %f" % (prevWord,
                                                        1.0 if wordDepth == 1 else 0.0, 
-                                                       0.5 if wordDepth == 2 else 0.0,
-                                                       sentencePerf.getDepthWeightedSuccessSentence()));
+                                                       0.5 if wordDepth == 2 else 0.0))
             if wordDepth is None:
                 # wanted word is not in tree anywhere:
                 sentencePerf.addFailure();
@@ -462,10 +458,10 @@ class Evaluator(object):
             totalDepthWeightedScore = 0.0
             totalDepth1Score = 0;
             totalDepth2Score = 0;
-            for performance in self.performanceTally:
-                totalDepthWeightedScore += performance.getDepthWeightedSuccessSentence();
-                totalDepth1Score        += performance.getDepthCount(1);
-                totalDepth2Score        += performance.getDepthCount(2);
+            performance = self.performanceTally[-1]
+            totalDepthWeightedScore += performance.getDepthWeightedSuccessSentence();
+            totalDepth1Score        += performance.getDepthCount(1);
+            totalDepth2Score        += performance.getDepthCount(2);
                 
             print("\t\t\tTotal: \t%f  %f  %f" % (totalDepth1Score,
                                                  totalDepth2Score * 0.5,

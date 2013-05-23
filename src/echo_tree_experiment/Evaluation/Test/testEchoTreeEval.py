@@ -21,7 +21,7 @@ class TestEchoTreeEval(unittest.TestCase):
                                                     [self.tokenFile],
                                                     verbosity=Verbosity.DEBUG
                                                     );  
-        self.assertEqual(0.369, perfNum);
+        self.assertEqual(0.373015873015873, perfNum);
         
 if __name__ == '__main__':
     unittest.main()
