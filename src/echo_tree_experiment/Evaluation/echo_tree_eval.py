@@ -222,10 +222,12 @@ class Evaluator(object):
         @type jsonEchoTreeStr: string
         '''
         pythonEchoTree = json.loads(jsonEchoTreeStr);
-        flatTree  = self.extractWordSeqsHelper(pythonEchoTree);
-        flatList  = flatTree.split();
-        rootWord = flatList[0];
-        flatSet = set(flatList[1:]);
+        flatTreeStr  = self.extractWordSeqsHelper(pythonEchoTree);
+        lowerCaseFlatTreeList = [];
+        for word in flatTreeStr.split(" "):
+            lowerCaseFlatTreeList.append(word.lower());
+        rootWord = lowerCaseFlatTreeList[0];
+        flatSet = set(lowerCaseFlatTreeList[1:]);
         return (rootWord, flatSet);
     
     def getDepthFromWord(self, pythonEchoTree, word):
