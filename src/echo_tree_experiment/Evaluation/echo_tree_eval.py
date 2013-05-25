@@ -23,20 +23,25 @@ class Verbosity:
 
 class SentencePerformance(object):
     '''
-    *********Stuct to hold measurement results of one sentence.
+    Stuct to hold measurement results of one sentence.
        - sentenceLen: number of words that are not stopwords.
        - failures: number of times a tree did not contain one of the words, and a new tree needed to 
                    be constructed by typing in the word.
        - outOfSeqs: number of times future word in the sentence was in an early tree.
-       - depths: for each tree depth, how many of the sentence's words appeared at that depth.   
+       - depths: for each tree depth, how many of the sentence's words appeared at that depth.
+       - percentage chars that did not need to be typed b/c of echo tree
     '''
     
     def __init__(self, evaluator, tokenSequence, emailID=-1, sentenceID=None):
         self.evaluator = evaluator;
         self.emailID = emailID;
         self.sentenceID = sentenceID;
+        self.tokenSequence = tokenSequence;
         
+        # Number of words in the sentence:
         self.sentenceLen = len(tokenSequence);
+        # Num chars that didn't need to be typed:
+        self.lettersSaved = 0;
         self.failures    = 0;
         self.outOfSeqs   = 0;
         self.depths      = {};
@@ -68,6 +73,28 @@ class SentencePerformance(object):
             self.depths[depth] += 1;
         except KeyError:
             self.depths[depth] = 1;
+       
+    def addPredictedWord(self, word):
+        # One word did not need to be typed. We don't include
+        # the space after the word in the calculation, because
+        # the predicted word does need to be saved: 
+        self.lettersSaved += len(word);
+            
+    def getPercentTypeSavings(self):
+        '''
+        Compute EchoTree induced savings in typing characters in this SentencePerformance
+        instance's sentence.
+        Type savings is computed as a percentage relating the sum of
+        characters in predicted words to the total sentence length. Total sentence length
+        includes spaces between words, and a closing period. The length of
+        a predicted word does NOT include its following space, because while that space
+        is automatically inserted in the UI, the user does need to click on the word.
+        '''
+        numCharsInSentence = 0.0;
+        for token in self.tokenSequence:
+            numCharsInSentence += len(token) + 1; # plus 1 is the space
+        percSaved = 100.0 *  self.lettersSaved / numCharsInSentence;
+        return percSaved;
             
     def getNetFailure(self):
         '''
@@ -146,12 +173,13 @@ class SentencePerformance(object):
         '''
         Return human-readable performance of this sentence.
         '''
-        netFailure = self.getNetFailure();
-        netSuccess = self.getNetSuccess();
+        #netFailure = self.getNetFailure();
+        #netSuccess = self.getNetSuccess();
         depthReport = str(self.getDepths());
+        inputSavings = self.getPercentTypeSavings();
         
-        return "SentenceLen: %d. Failures: %d. OutofSeq: %d. NetFailure: %d. NetSuccess: %.2f%%. Depths: %s" %\
-            (self.sentenceLen, self.failures, self.outOfSeqs, netFailure, netSuccess, depthReport);
+        return "SentenceLen: %d. Failures: %d. OutofSeq: %d. InputSavings: %.2f. Depths: %s" %\
+            (self.sentenceLen, self.failures, self.outOfSeqs, inputSavings, depthReport);
                         
     def toCSV(self):
         row =        str(self.emailID);
@@ -159,8 +187,7 @@ class SentencePerformance(object):
         row += ',' + str(self.sentenceLen);
         row += ',' + str(self.failures);
         row += ',' + str(self.outOfSeqs);
-        row += ',' + str(self.getNetFailure());
-        row += ',' + '%.2f' % self.getNetSuccess();
+        row += ',' + str(self.getPercentTypeSavings());
         for depth in range(1, self.evaluator.getMaxDepthAllSentences() + 1):
             row += ',' + str(self.getDepthCount(depth));
         row += ',' + str(self.getDepthWeightedSuccessSentence());
@@ -197,7 +224,7 @@ class Evaluator(object):
         return csv;
             
     def getCSVHeader(self):
-        header = 'EmailID,SentenceID,SentenceLen,Failures,OutofSeq,NetFailure,NetSuccess';        
+        header = 'EmailID,SentenceID,SentenceLen,Failures,OutofSeq,InputSavings';        
         for depthIndex in range(1,self.getMaxDepthAllSentences() + 1):
             header += ',Depth_' + str(depthIndex);
         header += ',DepthWeightedScore'
@@ -247,7 +274,6 @@ class Evaluator(object):
         # two words for a trigram system, yet one word
         # for bigram systems. Check whether *any* word in the given
         # pythonEchoTree match wordToFind. 
-        #****REMOVE if pythonEchoTree['word'] == wordToFind:
 
         if wordToFind in pythonEchoTree['word'].split():
             resultDepths.append(depth);
@@ -410,6 +436,8 @@ class Evaluator(object):
         @type sentenceID: <any>
         @param removeStopwords: whether or not to remove stopwords.
         @type removeStopwords: boolean
+        @return: an array of all words successfully predicted (in any level of the tree)
+        @rtype: [string]
         '''
         # We'll modify sentenceTokens in the loop
         # below, so get a shallow copy for the loop:
@@ -431,6 +459,7 @@ class Evaluator(object):
         if sentenceID is None:
             sentenceID = len(self.performanceTally);
         sentencePerf = SentencePerformance(self, sentenceTokens, emailID=emailID, sentenceID=sentenceID);
+        predictedWords = [];
         
         # Start for real:
         tree = self.wordExplorer.makeWordTree(sentenceTokens[0], self.arity);
@@ -440,9 +469,9 @@ class Evaluator(object):
             #word = word.lower();
             wordDepth = self.getDepthFromWord(tree, word);
             if self.verbosity == Verbosity.DEBUG:
-                print("   Word %s score:\t\t%f  %f" % (prevWord,
-                                                       1.0 if wordDepth == 1 else 0.0, 
-                                                       0.5 if wordDepth == 2 else 0.0))
+                print("   Word '%s' score:\t\t%f  %f" % (prevWord,
+                                                         1.0 if wordDepth == 1 else 0.0, 
+                                                         0.5 if wordDepth == 2 else 0.0))
             if wordDepth is None:
                 # wanted word is not in tree anywhere:
                 sentencePerf.addFailure();
@@ -454,6 +483,8 @@ class Evaluator(object):
             else:
                 # Found word in tree:
                 sentencePerf.addWordDepth(wordDepth);
+                sentencePerf.addPredictedWord(word);
+                predictedWords.append(word);
             # Build a new tree from the (virtually) typed in current word
             tree =  self.wordExplorer.makeWordTree(word, self.arity);
             treeWords = self.extractWordSet(self.wordExplorer.makeJSONTree(tree));
@@ -474,6 +505,8 @@ class Evaluator(object):
                                                  totalDepth2Score * 0.5,
                                                  totalDepthWeightedScore));
             print("\t\t\t       \t-------------------------------");
+        return predictedWords;
+    
     def readSentence(self, fd):
         sentenceOpener = '['
         sentenceCloser= ']'
@@ -551,24 +584,48 @@ class Evaluator(object):
         self.arity = arity;
         
         self.initWordCaptureTally();
+        # Total length of all words in all sentences that will be tested
+        allWordsLen = 0;
+        # A list of all words that were predicted successfully:
+        allPredictedWords = [];
         for tokenFilePath in tokenFilePaths:
             msgID = self.checksum(tokenFilePath);
             sentenceID = 0;
             with open(tokenFilePath, 'r') as tokenFD:
                 while 1:
+                    # Get one sentence as a comma-separated string of tokens:
                     pythonSentenceTokens = self.readSentence(tokenFD);
                     if self.verbosity == Verbosity.DEBUG:
                         print("Sentence %d tokens: %s" % (numSentencesDone,str(pythonSentenceTokens)));
                     if pythonSentenceTokens is None:
                         # Done with one file.
                         break;
-                    self.tallyWordCapture(pythonSentenceTokens.split(','), emailID=msgID, sentenceID=sentenceID, removeStopwords=removeStopwords);
+                    tokenArray = pythonSentenceTokens.split(',');
+                    # Compute the sentence length in characters, adding
+                    # a space (or closing period) for each token:
+                    for token in tokenArray:
+                        allWordsLen += len(token) + 1;
+                    # Do the stats:
+                    predictedWordsThisSentence = self.tallyWordCapture(tokenArray, emailID=msgID, sentenceID=sentenceID, removeStopwords=removeStopwords);
+                    if self.verbosity == Verbosity.DEBUG:
+                        print("Words predicted in sentence %d: %s." % (numSentencesDone, predictedWordsThisSentence));
+                        print("Typing saved: " + str(self.performanceTally[-1].getPercentTypeSavings()));
+                    allPredictedWords.extend(predictedWordsThisSentence);
                     sentenceID += 1;
                     if self.verbosity != Verbosity.NONE:
                         numSentencesDone += 1;
                         if numSentencesDone % reportEvery == 0:
                             print "At file %s. Done %d sentences." % (os.path.basename(tokenFilePath), numSentencesDone);
                             
+        numCharsSaved = 0;
+        # Compute percentage typing saved for all sentences together.
+        # Note that we cannot subtract one char for the automatically
+        # generated space after each word, because users do have to
+        # click on the word:
+        for word in allPredictedWords:
+            numCharsSaved += len(word);
+        typingSaved = numCharsSaved * 100 / allWordsLen;
+         
         with open(csvFilePath,'w') as CsvFd:
             csvAll = self.toCSV(outFileFD=CsvFd);
         if self.verbosity == Verbosity.DEBUG:
@@ -659,126 +716,3 @@ if __name__ == '__main__':
                                  );  
     
     sys.exit();
-        
-        
-    dbPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), "../Resources/EnronCollectionProcessed/EnronDB/enronDB.db");
-    evaluator = Evaluator(dbPath);
-    thisFileDir = os.path.realpath(os.path.dirname(__file__));
-    try:
-        stacksPos = thisFileDir.index("stacks")
-    except ValueError:
-        print "The 'stacks' directory not found above this file (that you're running). Assuming source tree of echo_tree_sentence_seg to be under stacks.";
-        sys.exit();
-
-    stacksDir = thisFileDir[0:stacksPos + len('stacks')];
-    emailTokenizerDir = stacksDir + "/echo_tree_sentence_seg/src/EchoTreeTextProcessingJava/target";  
-    tokensTargetDir = stacksDir + '/echo_tree/src/echo_tree/Resources/EmailEchoTreeOverlapTests/EmailMsgTokens/';
-    emailsSourceDir = stacksDir + '/echo_tree/src/echo_tree/Resources/EmailEchoTreeOverlapTests/EmailMsgs/';
-    fullPathEmailFileList = []; 
-    for fileName in os.listdir(emailsSourceDir):
-        fullPathEmailFileList.append(os.path.join(emailsSourceDir, fileName));
-    
-    # To run, rather than test, uncomment from here...
-    evaluator.initWordCaptureTally();
-    tokens = "this, demonstrates, a, couple, things, ;, it, appears, to, be, disruptive, technology, -LRB-, but, i, need, to, demo, it, to, be, sure, -RRB-, ;, it, shows, how, products, for, the, disabled, can, lead, t0, commercial, products, for, the, general, population, ;, it, really, stresses, how, technology, is, an, anti, dote, for, depression, among, the, disabled, ;, it, does, not, require, HEAD, movement, ,, only, EYE, some, draw, backs, ;, it, only, works, with, Windows, -LRB-, UGH, -RRB-, it, still, requires, a, computer, screen, 18, '', in, front, of, your, face, i, doubt, it, is, faster, than, my, current, headtracker, or, more, precise, -LRB-, but, i, need, to, play, with, one, to, be, sure, -RRB-".split(', '); 
-    #tokens = ['this','demonstrates','a','couple','things'];
-    evaluator.tallyWordCapture(tokens);
-    print evaluator.performanceTally[0].toString();
-    print evaluator.toCSV(); 
-    
-    # ... to here (running for real, rather than tests.)
-
-    
-#    # The automatic invocation of the Java based tokenizer isn't working. Get mangling of file names.
-#    # Instead, run the following in a terminal:
-#    #     java -jar emailTokenizer.jar foo ~/fuerte/stacks/echo_tree/src/echo_tree/Resources/EmailEchoTreeOverlapTests/EmailMsgTokens/ 
-#    #                                      ~/fuerte/stacks/echo_tree/src/echo_tree/Resources/EmailEchoTreeOverlapTests/EmailMsgs/*.txt
-#    # That will take files in Resource's EmailEchoTreeOverlapTests/EmailMsgs, tokenize them, and deposit token files
-#    # in  ~/fuerte/stacks/echo_tree/src/echo_tree/Resources/EmailEchoTreeOverlapTests/EmailTokens with _Tokens added to
-#    # the basename.
-     
-#    # The Java arg, and the jar name:
-#    sysCallArgs = ['java', '-jar', emailTokenizerDir + '/emailTokenizer.jar'];
-#    sysCallArgs.append(tokensTargetDir);
-#    sysCallArgs.extend(fullPathEmailFileList);
-#    
-#    print str(sysCallArgs);
-#    
-#    call(sysCallArgs);
-    
-    # Unit tests:
-
-#    from unittest import TestCase;
-#    import unittest;
-#    
-#    class Tests(TestCase):
-#        
-#        def testSentenceRead(self):
-#            # Test sentence reader:
-#            with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
-#                                    '../Resources/tokenReaderTest.txt'))  as fd:
-#                sentence = evaluator.readSentence(fd);
-#                self.assertEqual(sentence, '[here,and,there]', "Sentence getting failed. Is %s" % sentence);
-#                
-#                sentence = evaluator.readSentence(fd);
-#                self.assertEqual(sentence, '[,,,]', "Sentence getting failed. Is %s" % sentence);
-#        
-#                sentence = evaluator.readSentence(fd);
-#                self.assertEqual(sentence, '[foo]', "Sentence getting failed. Is %s" % sentence);
-#
-#                sentence = evaluator.readSentence(fd);
-#                self.assertEqual(sentence, '[]', "Sentence getting failed. Is %s" % sentence);
-#
-#                sentence = evaluator.readSentence(fd);
-#                self.assertEqual(sentence, '[bar]', "Sentence getting failed. Is %s" % sentence);
-
-#    testJson = '{"word": "reliability", "followWordObjs": [{"word": "new", "followWordObjs": [{"word": "power", "followWordObjs": []}, {"word": "generation", "followWordObjs": []}, {"word": "business", "followWordObjs": []}, {"word": "product", "followWordObjs": []}, {"word": "company", "followWordObjs": []}]}, {"word": "issues", "followWordObjs": [{"word": "related", "followWordObjs": []}, {"word": "need", "followWordObjs": []}, {"word": "raised", "followWordObjs": []}, {"word": "such", "followWordObjs": []}, {"word": "addressed", "followWordObjs": []}]}, {"word": "legislation", "followWordObjs": [{"word": "passed", "followWordObjs": []}, {"word": "allow", "followWordObjs": []}, {"word": "introduced", "followWordObjs": []}, {"word": "require", "followWordObjs": []}, {"word": "provide", "followWordObjs": []}]}, {"word": "standards", "followWordObjs": [{"word": "conduct", "followWordObjs": []}, {"word": "set", "followWordObjs": []}, {"word": "needed", "followWordObjs": []}, {"word": "facilitate", "followWordObjs": []}, {"word": "required", "followWordObjs": []}]}, {"word": "problems", "followWordObjs": [{"word": "please", "followWordObjs": []}, {"word": "California", "followWordObjs": []}, {"word": "accessing", "followWordObjs": []}, {"word": "arise", "followWordObjs": []}, {"word": "occur", "followWordObjs": []}]}]}';
-    
-#    # Sentences
-#    sentences = evaluator.extractWordSeqs(testJson);
-#    # Root word:
-#    print sentences.popleft();
-#    indents=[1,2,3,4];
-#    for i,wordDict in enumerate(reversed(sentences)):
-#        indent = indents[0];
-#        parentWord =  wordDict.keys()[0];
-#        print '\t'*indent + parentWord;
-#        for word in reversed(wordDict[parentWord]):
-#            indent = indents[1];
-#            print '\t'*indent + word;
-#            
-#    # Sentence generation:
-#    sentences = evaluator.extractWordSeqs(testJson);
-#    print str(sentences);
-#    print str(evaluator.extractWordSet(testJson));
-#   
-#    # Different-sized trees: 
-#    from echo_tree.echo_tree import WordExplorer; 
-#    wordExplorer = WordExplorer(dbPath);
-#    deepTree = wordExplorer.makeWordTree('reliability', maxDepth=4);
-#    deepJson = wordExplorer.makeJSONTree(deepTree);
-#    deepSentences = evaluator.extractWordSeqs(deepJson);
-#    print str(deepSentences);
-#    
-#    broadTree = wordExplorer.makeWordTree('reliability', maxBranch=6);
-#    broadJson = wordExplorer.makeJSONTree(broadTree);
-#    broadSentences = evaluator.extractWordSeqs(broadJson);
-#    print str(broadSentences);
-    
-    # Depth measures for words:
-#    pythonTree = json.loads(testJson);
-#    print (str(pythonTree)); 
-#    depth = evaluator.getDepthFromWord(pythonTree, 'reliability');
-#    print str(depth) # 0
-#    depth = evaluator.getDepthFromWord(pythonTree, 'new');
-#    print str(depth); # 1
-#    depth = evaluator.getDepthFromWord(pythonTree, 'product');
-#    print str(depth); # 2
-#    depth = evaluator.getDepthFromWord(pythonTree, 'issues');
-#    print str(depth); # 1
-#    depth = evaluator.getDepthFromWord(pythonTree, 'occur');
-#    print str(depth); # 2
-#    depth = evaluator.getDepthFromWord(pythonTree, 'foo');
-#    print str(depth); # None
-#
-#unittest.main();

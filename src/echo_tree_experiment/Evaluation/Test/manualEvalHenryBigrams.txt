@@ -12,6 +12,23 @@ a		  0  0
 nightmare
                   ----
 		  2  3 = 3.5/9 = 0.388888888888888888888888888
+
+Sentence 0       Letters
+------------------------
+It                  2
+was 		    3
+just 		    4
+the 		    3
+accomodations 	   13
+that 		    4
+had 		    3
+been 		    4
+a 		    1
+nightmare	    9
+                   46 chars + 10 spaces = 56. Saved 14 ==> 25%
+
+
+
 Sentence 1:
 -----------
 Before            1  0
@@ -31,6 +48,23 @@ grade		  0  0
 graduation	  
 		  ----
 		  5  0 = 5/14 = 0.35714285714285714285714285714286
+
+ Sentence 1     # Letters
+------------------------
+Beforewemo        10
+vedthistim        10
+ethoughwev        10
+isitedCali        10
+forniaforN        10
+ickseighth        10
+gradegradu        10
+ation		   5
+                  ---
+                  75 chars + 15 spaces = 90. Saved 15 ==> 16.666666667%
+                  ---
+Total letters senteces 0 plus sentence 1: 56 + 90 = 146
+
+
 
 Total S0: 0.38888888888888888888888888888888
       S1: 0.35714285714285714285714285714286

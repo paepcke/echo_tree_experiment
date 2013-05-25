@@ -1,1 +1,0 @@
-[Second, test, ;, we, tokenize, the, semi, .][And, a, short, one, .]
