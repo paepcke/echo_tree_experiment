@@ -243,17 +243,32 @@ class Evaluator(object):
         #**********************
         #self.wordExplorer.printWordTree(pythonEchoTree, 2);
         #**********************
-        return self.getDepthFromWordHelper(pythonEchoTree, word, depth=0);
+        resultDepths = []
+        self.getDepthFromWordHelper(pythonEchoTree, word, resultDepths, depth=0);
+        try:
+            return min(resultDepths);
+        except ValueError:
+            return None;
     
-    def getDepthFromWordHelper(self, pythonEchoTree, wordToFind, depth=0):
+    def getDepthFromWordHelper(self, pythonEchoTree, wordToFind, resultDepths, depth=0):
         if pythonEchoTree is None:
             return None;
-        if pythonEchoTree['word'] == wordToFind: 
-            return depth;
+        # While 'wordToFind' is always a single word, the
+        # subtrees (pythonEchoTree['word']) will be 
+        # two words for a trigram system, yet one word
+        # for bigram systems. Check whether *any* word in the given
+        # pythonEchoTree match wordToFind. 
+        #****REMOVE if pythonEchoTree['word'] == wordToFind:
+
+        if wordToFind in pythonEchoTree['word'].split():
+            resultDepths.append(depth);
+            return;
+        # No match; recursively check the subtrees:
         for subtree in pythonEchoTree['followWordObjs']:
-            newDepth = self.getDepthFromWordHelper(subtree, wordToFind, depth=depth+1);
+            newDepth = self.getDepthFromWordHelper(subtree, wordToFind, resultDepths, depth=depth+1);
             if newDepth is not None:
-                return newDepth;
+                resultDepths.append(newDepth);
+                return;
         return None;
     
     

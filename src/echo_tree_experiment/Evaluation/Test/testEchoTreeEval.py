@@ -33,7 +33,7 @@ class TestEchoTreeEval(unittest.TestCase):
                                                     [self.tokenFile],
                                                     verbosity=Verbosity.DEBUG
                                                     );  
-        self.assertEqual(0.373015873015873, perfNum);
+        self.assertEqual(0.2718253968253968253968253968254, perfNum);
 
 
         
