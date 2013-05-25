@@ -14,7 +14,6 @@ class TestEchoTreeEval(unittest.TestCase):
         self.tokenFile  = os.path.join(currDir, "henry_Tokens.txt");
         self.testArity  = 2;
 
-    @unittest.skip("debugging trigrams now")
     def test_bigrams(self):
         self.testArity = 2;
         perfNum = self.evaluator.measurePerformance("/tmp/echoTreeEvalTest.csv",
@@ -33,7 +32,7 @@ class TestEchoTreeEval(unittest.TestCase):
                                                     [self.tokenFile],
                                                     verbosity=Verbosity.DEBUG
                                                     );  
-        self.assertEqual(0.2718253968253968253968253968254, perfNum);
+        self.assertEqual(0.30753968253968256, perfNum);
 
 
         

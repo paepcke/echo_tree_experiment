@@ -2,16 +2,16 @@ Sentence 0:
 -----------
 It:	          0  0
 was: 	          0  0
-just:             0  0
+just:             0  1
 the:		  0  0
 accommodations:   0  0
 that              0  0
 had		  1  0
-been		  1  0
+been		  0  1
 a		  0  0
 nightmare
                   ----
-		  2  0 = 2/9 = 0.22222222222222222222222222222222
+		  1  1 = 2/9 = 0.22222222222222222222222222222222
 Sentence 1:
 -----------
 Before            1  0
@@ -19,10 +19,10 @@ we		  0  0
 moved		  0  0
 this		  1  0
 time		  0  0
-though		  0  0
+though		  0  1
 we		  0  0
-visited		  0  1
-California	  0  0
+visited		  0  0
+California	  1  0
 for		  0  0
 Nick		  1  0
 s		  0  0
@@ -30,7 +30,7 @@ eighth		  1  0
 grade		  0  0
 graduation	  
 		  ----
-		  4  1 = 4.5/14 = 0.32142857142857142857142857142857
+		  5  0.5 = 5.5/14 = 0.392857143
 
 Total S0: 0.22222222222222222222222222222222
       S1: 0.32142857142857142857142857142857
