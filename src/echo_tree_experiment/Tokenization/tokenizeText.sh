@@ -21,6 +21,8 @@ then
     exit
 fi
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 if [ -d $1 ]
 then
     # We are to tokenize a whole directory:
@@ -44,4 +46,4 @@ fi
 #echo "Source: $srcFiles"
 #echo "Dest: $outDir"
 
-java -jar emailTokenizer.jar com.willowgarage.echo_tree.EmailTokenizer $outDir $srcFiles
+java -jar $SCRIPT_DIR/emailTokenizer.jar com.willowgarage.echo_tree.EmailTokenizer $outDir $srcFiles
