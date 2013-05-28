@@ -128,7 +128,11 @@ class SentencePerformance(object):
             sum(   --------------------------  ) for all words in sentence
                         (sentenceLen - 1)
         '''
+        # If sentence is only one word long, it gets no points
+        # because there could not have been a prediction:
         res = 0.0;
+        if self.sentenceLen <= 1:
+            return res;
         #maxDepth = self.evaluator.getMaxDepthAllSentences();
         for depth in range(1, WORD_TREE_DEPTH):
             res += 0.5**(depth-1) * self.getDepthCount(depth);
