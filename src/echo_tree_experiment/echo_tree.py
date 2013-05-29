@@ -74,7 +74,7 @@ class WordFollower(object):
         @type arity: ARITY
         '''
         self.db   = db;
-        self.word = word;
+        self.word = self.strip_non_ascii(word);
         self.arity = arity;
         
     def __enter__(self):
@@ -90,9 +90,9 @@ class WordFollower(object):
         # though the followingCount is declared as int:
         try:
             if self.arity == ARITY.BIGRAM:
-                self.cursor.execute('SELECT word2 from Bigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
+                self.cursor.execute('SELECT word2 from Bigrams where word1="%s" ORDER BY probability*1 desc;' % self.word);
             elif self.arity == ARITY.TRIGRAM:
-                self.cursor.execute('SELECT word2,word3 from Trigrams where word1="%s" ORDER BY probability*1 desc;' % self.word.encode('ascii', 'ignore'));
+                self.cursor.execute('SELECT word2,word3 from Trigrams where word1="%s" ORDER BY probability*1 desc;' % self.word);
             else:
                 raise ValueError("WordFollower for arity %d is not implemented." % self.arity);
         except sqlite3.OperationalError as e:
@@ -117,7 +117,12 @@ class WordFollower(object):
             # exception occurred in the caller's with clause:
             pass;
         self.cursor.close();
-        
+
+    def strip_non_ascii(self, string):
+        ''' Returns the string without non ASCII characters'''
+        stripped = (c for c in string if 0 < ord(c) < 127)
+        return ''.join(stripped)
+            
 # ------------------------------- class Word Explorer ---------------------        
 class WordExplorer(object):
     '''
