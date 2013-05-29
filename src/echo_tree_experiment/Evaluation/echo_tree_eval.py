@@ -11,6 +11,9 @@ from echo_tree_experiment.echo_tree import WORD_TREE_DEPTH;
 from echo_tree_experiment.echo_tree import WordExplorer;
 from echo_tree_experiment.echo_tree import STOPWORDS;
 
+# Report progress every x sentences:
+PROGRESS_RATE = 100;
+
 # All of string.punctuation, except for comma, which is
 # the Stanford NLP token separator:
 PUNCTUATION = '!"#$%&\'()*+-./:;<=>?@[\\]^_`{|}~'
@@ -453,7 +456,9 @@ class Evaluator(object):
             if removeStopwords and (word.lower() in STOPWORDS):
                 sentenceTokens.remove(word);
                 continue;
-
+        if len(sentenceTokens) == 0:
+            # The sentence was all empty words, or stopwords that we were asked to remove:
+            return "";
         if self.verbosity == Verbosity.DEBUG:
             print("Sentence %d tokens after cleanup: %s" % (sentenceID,str(sentenceTokens)));        
                 
@@ -580,7 +585,7 @@ class Evaluator(object):
         '''
         if verbosity > 0:
             numSentencesDone = 0;
-            reportEvery = 10; # progress every 10 sentences
+            reportEvery = PROGRESS_RATE; # progress every PROGRESS_RATE sentences
             # Be debug level verbose:
             if verbosity > 1:
                 self.verbosity = verbosity;
